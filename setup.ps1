@@ -431,45 +431,161 @@ function Add-JavaToPath {
     return $false
 }
 
-function Install-AndroidSdk {
-    Write-Host "`n  [+] Configurando Android SDK..." -ForegroundColor Yellow
+function Test-CommandLineToolsInstalled {
+    $sdkDir = "$env:LOCALAPPDATA\Android\Sdk"
+    $cmdlineDir = "$sdkDir\cmdline-tools\latest\bin"
+    $sdkmanager = "$cmdlineDir\sdkmanager.bat"
+    if (Test-Path $sdkmanager) {
+        Write-Result "Android commandline-tools encontrado" "OK"
+        return $true
+    }
+    return $null
+}
 
-    $adbPath = Test-AdbInstalled
-    if ($adbPath) {
-        Write-Result "ADB ja disponivel" "OK"
-        $adbDir = Split-Path $adbPath -Parent
-        $env:PATH = "$adbDir;$env:PATH"
-        Write-Result "ADB adicionado ao PATH" "OK"
+function Install-AndroidCommandLineTools {
+    Write-Host "`n  [+] Baixando Android commandline-tools..." -ForegroundColor Yellow
+
+    $sdkDir = "$env:LOCALAPPDATA\Android\Sdk"
+    $zipUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
+    $zipPath = Join-Path $sdkDir "commandlinetools.zip"
+    $extractDir = Join-Path $sdkDir ".temp_cmdline"
+
+    try {
+        New-Item -ItemType Directory -Force -Path $sdkDir | Out-Null
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+        Write-Result "Download concluido" "OK"
+    } catch {
+        Write-Result "Erro ao baixar commandline-tools: $($_.Exception.Message)" "ERRO"
+        return $false
+    }
+
+    Write-Host "    Extraindo arquivos..." -ForegroundColor Yellow
+    try {
+        Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+        Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+        # A estrutura do zip e: cmdline-tools/bin/, cmdline-tools/lib/ etc
+        # Precisa ser: cmdline-tools/latest/bin/, cmdline-tools/latest/lib/
+        Remove-Item -Path "$sdkDir\cmdline-tools" -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path "$sdkDir\cmdline-tools" | Out-Null
+        Move-Item -Path "$extractDir\cmdline-tools\*" -Destination "$sdkDir\cmdline-tools\latest\" -Force
+        Remove-Item -Path $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Result "Arquivos extraidos para $sdkDir\cmdline-tools" "OK"
+    } catch {
+        Write-Result "Erro ao extrair: $($_.Exception.Message)" "ERRO"
+        return $false
+    }
+
+    $sdkmanager = "$sdkDir\cmdline-tools\latest\bin\sdkmanager.bat"
+    if (Test-Path $sdkmanager) {
+        $env:PATH = "$sdkDir\cmdline-tools\latest\bin;$env:PATH"
+
+        Write-Host "    Aceitando licencas do Android SDK..." -ForegroundColor Yellow
+        # Usar cmd /c para evitar problemas com o sdkmanager.bat
+        Start-Process -FilePath "cmd" -ArgumentList "/c", "`"$sdkmanager`" --licenses --sdk_root=`"$sdkDir`" < nul" -NoNewWindow -Wait
+
+        Write-Host "    Instalando platform-tools e build-tools..." -ForegroundColor Yellow
+        Start-Process -FilePath "cmd" -ArgumentList "/c", "`"$sdkmanager`" `"platform-tools`" `"build-tools;34.0.0`" `"platforms;android-34`" --sdk_root=`"$sdkDir`"" -NoNewWindow -Wait
+
+        Write-Result "Android commandline-tools instalado com sucesso!" "OK"
+
+        # Adicionar ao PATH permanentemente
+        try {
+            $regPath = "HKCU:\Environment"
+            $currentPath = (Get-ItemProperty -Path $regPath -Name Path -ErrorAction SilentlyContinue).Path
+            $toolsBin = "$sdkDir\cmdline-tools\latest\bin"
+            $paltformTools = "$sdkDir\platform-tools"
+            if ($currentPath) {
+                $newPath = $currentPath
+                if ($newPath -notlike "*$toolsBin*") { $newPath = "$toolsBin;$newPath" }
+                if ($newPath -notlike "*$paltformTools*") { $newPath = "$paltformTools;$newPath" }
+                Set-ItemProperty -Path $regPath -Name Path -Value $newPath
+            }
+        } catch {
+            Write-Result "Nao foi possivel adicionar ao PATH permanentemente" "AVISO"
+        }
+
         return $true
     }
 
-    $studioDirs = @(
-        "C:\Program Files\Android\Android Studio",
-        "$env:LOCALAPPDATA\Google\AndroidStudio*"
-    )
+    Write-Result "Falha ao instalar Android commandline-tools" "ERRO"
+    return $false
+}
 
-    foreach ($dir in $studioDirs) {
-        $resolved = Resolve-Path $dir -ErrorAction SilentlyContinue
-        if ($resolved) {
-            Write-Result "Android Studio encontrado em $resolved" "AVISO"
-            Write-Result "ADB nao encontrado. Instale o SDK platform-tools pelo SDK Manager do Android Studio." "AVISO"
-            return $true
-        }
+function Install-Adb {
+    Write-Host "`n  [+] Instalando ADB (Android platform-tools)..." -ForegroundColor Yellow
+
+    $sdkDir = "$env:LOCALAPPDATA\Android\Sdk"
+    $platformToolsDir = "$sdkDir\platform-tools"
+    $adbExe = "$platformToolsDir\adb.exe"
+
+    if (Test-Path $adbExe) {
+        Write-Result "ADB ja instalado em $adbExe" "OK"
+        $env:PATH = "$platformToolsDir;$env:PATH"
+        return $true
     }
 
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Instalando Android Studio via winget..." -ForegroundColor Yellow
-        $result = Invoke-Safe { winget install Google.AndroidStudio --silent --accept-package-agreements --accept-source-agreements } "Instalar Android Studio"
+    # Tentar chocolatey primeiro (mais rapido)
+    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
+    if ($chocoAvailable) {
+        $result = Invoke-Safe { choco install adb -y } "Instalar ADB via chocolatey"
         if ($result.Success) {
-            Write-Result "Android Studio instalado. ADB requer configuracao manual pelo SDK Manager." "AVISO"
-            return $true
+            $adbCmd = Get-Command adb -ErrorAction SilentlyContinue
+            if ($adbCmd) {
+                $adbDir = Split-Path $adbCmd.Source -Parent
+                $env:PATH = "$adbDir;$env:PATH"
+                Write-Result "ADB instalado via chocolatey" "OK"
+                return $true
+            }
         }
     }
 
-    Write-Banner "CONFIGURACAO MANUAL DO ADB" "Red"
-    Write-Host "  Instale o Android Studio e configure o SDK platform-tools pelo SDK Manager." -ForegroundColor Cyan
-    exit 1
+    # Baixar platform-tools do Google diretamente
+    Write-Host "    Baixando platform-tools do Google..." -ForegroundColor Yellow
+    $zipUrl = "https://dl.google.com/android/repository/platform-tools-latest-windows.zip"
+    $zipPath = Join-Path $sdkDir "platform-tools-latest-windows.zip"
+
+    try {
+        New-Item -ItemType Directory -Force -Path $sdkDir | Out-Null
+        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+        Write-Result "Download concluido" "OK"
+    } catch {
+        Write-Result "Erro ao baixar platform-tools: $($_.Exception.Message)" "ERRO"
+        return $false
+    }
+
+    Write-Host "    Extraindo arquivos..." -ForegroundColor Yellow
+    try {
+        Remove-Item -Path $platformToolsDir -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $zipPath -DestinationPath $sdkDir -Force
+        Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+        Write-Result "Arquivos extraidos para $platformToolsDir" "OK"
+    } catch {
+        Write-Result "Erro ao extrair: $($_.Exception.Message)" "ERRO"
+        return $false
+    }
+
+    if (Test-Path $adbExe) {
+        $env:PATH = "$platformToolsDir;$env:PATH"
+        Write-Result "ADB instalado com sucesso!" "OK"
+
+        # Adicionar ao PATH permanentemente (nivel usuario)
+        try {
+            $regPath = "HKCU:\Environment"
+            $currentPath = (Get-ItemProperty -Path $regPath -Name Path -ErrorAction SilentlyContinue).Path
+            if ($currentPath -and $currentPath -notlike "*$platformToolsDir*") {
+                Set-ItemProperty -Path $regPath -Name Path -Value "$platformToolsDir;$currentPath"
+                Write-Result "ADB adicionado ao PATH permanentemente" "OK"
+            }
+        } catch {
+            Write-Result "Nao foi possivel adicionar ao PATH permanentemente (tudo bem, ja esta na sessao)" "AVISO"
+        }
+
+        return $true
+    }
+
+    Write-Result "Falha ao instalar ADB" "ERRO"
+    return $false
 }
 
 function Install-NotepadPlusPlus {
@@ -870,7 +986,7 @@ Write-Host ("#" * 60) -ForegroundColor Cyan
 Write-Host "  Diretorio: $scriptDir" -ForegroundColor Gray
 Write-Host ""
 
-$totalSteps = 20
+$totalSteps = 21
 $currentStep = 0
 
 # PASSO 1: Python
@@ -879,7 +995,7 @@ Write-Step $currentStep $totalSteps "Verificando Python $pythonVersion"
 $pythonPath = Test-PythonInstalled
 if (-not $pythonPath) {
     Write-Result "Python $pythonVersion nao encontrado" "AVISO"
-    Install-Python
+    $null = Install-Python
 }
 
 # PASSO 2: setup.py
@@ -897,7 +1013,7 @@ $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Node.js"
 if (-not (Test-NodeInstalled)) {
     Write-Result "Node.js nao encontrado" "AVISO"
-    Install-NodeJs
+    $null = Install-NodeJs
 }
 
 # PASSO 4: npx
@@ -913,7 +1029,7 @@ Write-Step $currentStep $totalSteps "Verificando Java"
 $javaPath = Test-JavaInstalled
 if (-not $javaPath) {
     Write-Result "Java nao encontrado" "AVISO"
-    Install-Java
+    $null = Install-Java
 }
 
 # PASSO 6: ADB
@@ -922,90 +1038,100 @@ Write-Step $currentStep $totalSteps "Verificando ADB"
 $adbPath = Test-AdbInstalled
 if (-not $adbPath) {
     Write-Result "ADB nao encontrado" "AVISO"
-    Install-AndroidSdk
+    $null = Install-Adb
 }
 
-# PASSO 7: Notepad++
+# PASSO 7: Android Command Line Tools
+$currentStep++
+Write-Step $currentStep $totalSteps "Verificando Android commandline-tools"
+if (-not (Test-CommandLineToolsInstalled)) {
+    Write-Result "Android commandline-tools nao encontrado" "AVISO"
+    $null = Install-AndroidCommandLineTools
+} else {
+    Write-Result "Android commandline-tools ja instalado" "OK"
+}
+
+# PASSO 8: Notepad++
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Notepad++"
 if (-not (Test-NotepadPlusPlusInstalled)) {
-    Install-NotepadPlusPlus
+    $null = Install-NotepadPlusPlus
 } else {
     Write-Result "Notepad++ ja instalado" "OK"
 }
 
-# PASSO 8: RustDesk
+# PASSO 9: RustDesk
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando RustDesk"
 if (-not (Test-RustDeskInstalled)) {
-    Install-RustDesk
+    $null = Install-RustDesk
 } else {
     Write-Result "RustDesk ja instalado" "OK"
 }
 
-# PASSO 9: Ollama
+# PASSO 10: Ollama
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Ollama"
 if (-not (Test-OllamaInstalled)) {
     Write-Result "Ollama nao encontrado" "AVISO"
-    Install-Ollama
+    $null = Install-Ollama
 }
 
-# PASSO 10: Modelo Ollama
+# PASSO 11: Modelo Ollama
 $currentStep++
 Write-Step $currentStep $totalSteps "Configurando modelo Ollama"
 $null = Install-OllamaModel -ModelName "llama3"
 
-# PASSO 11: Base de conhecimento
+# PASSO 12: Base de conhecimento
 $currentStep++
 Write-Step $currentStep $totalSteps "Configurando base de conhecimento Ollama"
 $null = Set-OllamaKnowledgeBase
 
-# PASSO 12: OpenCode
+# PASSO 13: OpenCode
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando OpenCode"
 if (-not (Test-OpencodeInstalled)) {
     Write-Result "OpenCode nao encontrado" "AVISO"
-    Install-Opencode
+    $null = Install-Opencode
 }
 
-# PASSO 13: Token OpenRouter
+# PASSO 14: Token OpenRouter
 $currentStep++
 Write-Step $currentStep $totalSteps "Configurando token OpenRouter"
 Request-OpenRouterToken
 
-# PASSO 14: Dependencias Python
+# PASSO 15: Dependencias Python
 $currentStep++
 Write-Step $currentStep $totalSteps "Instalando dependencias Python"
 $null = Install-PythonDependencies -pythonPath $pythonPath
 
-# PASSO 15: PATH do Windows
+# PASSO 16: PATH do Windows
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando PATH do Windows"
 Add-ToPathWindows
 
-# PASSO 16: Diretorio config Windsurf
+# PASSO 17: Diretorio config Windsurf
 $currentStep++
 Write-Step $currentStep $totalSteps "Criando diretorio de configuracao Windsurf"
 $null = New-McpConfig -ConfigDir $devinConfigDir -Label "Windsurf"
 
-# PASSO 17: Config MCP Devin
+# PASSO 18: Config MCP Devin
 $currentStep++
 Write-Step $currentStep $totalSteps "Criando configuracao MCP Devin"
 $devinAppDataDir = Join-Path $env:APPDATA "Devin"
 $null = New-McpConfig -ConfigDir $devinAppDataDir -Label "Devin"
 
-# PASSO 18: Testar servidor MCP
+# PASSO 19: Testar servidor MCP
 $currentStep++
 Write-Step $currentStep $totalSteps "Testando servidor MCP"
 Test-NpxFilesystem
 
-# PASSO 19: Instalar dependencias Python (via pip)
+# PASSO 20: Instalar dependencias Python (via pip)
 $currentStep++
 Write-Step $currentStep $totalSteps "Garantindo dependencias Python"
 $null = Invoke-Safe { & $pythonPath -m pip install --user python-dotenv } "Instalar python-dotenv"
 
-# PASSO 20: Verificacao final
+# PASSO 21: Verificacao final
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificacao final"
 Invoke-Verification -pythonPath $pythonPath
