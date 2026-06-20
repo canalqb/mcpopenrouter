@@ -213,15 +213,33 @@ function Test-OllamaInstalled {
 }
 
 function Test-JavaInstalled {
+    # Tentar comando direto primeiro (java no PATH)
+    try {
+        $result = java -version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "    Java encontrado no PATH: java" -ForegroundColor Green
+            $javaPath = (Get-Command java -ErrorAction SilentlyContinue).Source
+            if ($javaPath) {
+                return $javaPath
+            }
+            return "java"
+        }
+    } catch {
+        # Continuar para verificar caminhos específicos
+    }
+    
     $javaPaths = @(
         "C:\Program Files\Java\jdk-17\bin\java.exe",
         "C:\Program Files\Java\jdk-21\bin\java.exe",
         "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin\java.exe",
         "C:\Program Files\Eclipse Adoptium\jdk-21.*\bin\java.exe",
+        "C:\Program Files\Eclipse Adoptium\Temurin\jdk-17.*\bin\java.exe",
+        "C:\Program Files\Eclipse Adoptium\Temurin\jdk-21.*\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-21.*\bin\java.exe",
-        "java"
+        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\Temurin\jdk-17.*\bin\java.exe",
+        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\Temurin\jdk-21.*\bin\java.exe"
     )
     
     foreach ($path in $javaPaths) {
@@ -255,17 +273,6 @@ function Test-JavaInstalled {
             } catch {
                 continue
             }
-        }
-        
-        # Tentar comando direto (java)
-        try {
-            $result = & $path -version 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "    Java encontrado: $path" -ForegroundColor Green
-                return $path
-            }
-        } catch {
-            continue
         }
     }
     return $null
