@@ -470,6 +470,21 @@ function Install-AndroidSdk {
             Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se ADB ja esta instalado..." -ForegroundColor Yellow
+        $adbPath = Test-AdbInstalled
+        if ($adbPath) {
+            Write-Host "    [OK] ADB ja esta instalado: $adbPath" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ao PATH
+            $adbDir = Split-Path $adbPath -Parent
+            $env:PATH = "$adbDir;$env:PATH"
+            Write-Host "    [OK] ADB adicionado ao PATH: $adbDir" -ForegroundColor Green
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
     }
     
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
@@ -495,6 +510,21 @@ function Install-AndroidSdk {
                 }
             }
             
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se ADB ja esta instalado..." -ForegroundColor Yellow
+        $adbPath = Test-AdbInstalled
+        if ($adbPath) {
+            Write-Host "    [OK] ADB ja esta instalado: $adbPath" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ao PATH
+            $adbDir = Split-Path $adbPath -Parent
+            $env:PATH = "$adbDir;$env:PATH"
+            Write-Host "    [OK] ADB adicionado ao PATH: $adbDir" -ForegroundColor Green
             Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
@@ -540,6 +570,15 @@ function Install-NotepadPlusPlus {
             Write-Host "    Notepad++ instalado com sucesso via winget!" -ForegroundColor Green
             return $true
         }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se Notepad++ ja esta instalado..." -ForegroundColor Yellow
+        $nppPath = Test-NotepadPlusPlusInstalled
+        if ($nppPath) {
+            Write-Host "    [OK] Notepad++ ja esta instalado: $nppPath" -ForegroundColor Green
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
     }
     
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
@@ -548,6 +587,15 @@ function Install-NotepadPlusPlus {
         $result = Invoke-CommandSafe "choco install notepadplusplus -y" "Instalando Notepad++ via chocolatey"
         if ($result) {
             Write-Host "    Notepad++ instalado com sucesso via chocolatey!" -ForegroundColor Green
+            return $true
+        }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se Notepad++ ja esta instalado..." -ForegroundColor Yellow
+        $nppPath = Test-NotepadPlusPlusInstalled
+        if ($nppPath) {
+            Write-Host "    [OK] Notepad++ ja esta instalado: $nppPath" -ForegroundColor Green
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
     }
@@ -609,6 +657,33 @@ password = '2772'
             
             return $true
         }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se RustDesk ja esta instalado..." -ForegroundColor Yellow
+        $rustdeskPath = Test-RustDeskInstalled
+        if ($rustdeskPath) {
+            Write-Host "    [OK] RustDesk ja esta instalado: $rustdeskPath" -ForegroundColor Green
+            Write-Host "    Configurando senha padrao 2772..." -ForegroundColor Yellow
+            
+            # Criar arquivo de configuracao do RustDesk com senha
+            $rustdeskConfigDir = Join-Path $env:APPDATA "RustDesk"
+            $rustdeskConfigFile = Join-Path $rustdeskConfigDir "config.toml"
+            
+            try {
+                New-Item -ItemType Directory -Force -Path $rustdeskConfigDir | Out-Null
+                $configContent = @"
+password = '2772'
+"@
+                Set-Content -Path $rustdeskConfigFile -Value $configContent -Encoding UTF8
+                Write-Host "    [OK] Senha 2772 configurada para RustDesk!" -ForegroundColor Green
+            } catch {
+                Write-Host "    [AVISO] Nao foi possivel configurar senha automaticamente: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
     }
     
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
@@ -618,6 +693,33 @@ password = '2772'
         if ($result) {
             Write-Host "    RustDesk instalado com sucesso via chocolatey!" -ForegroundColor Green
             Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se RustDesk ja esta instalado..." -ForegroundColor Yellow
+        $rustdeskPath = Test-RustDeskInstalled
+        if ($rustdeskPath) {
+            Write-Host "    [OK] RustDesk ja esta instalado: $rustdeskPath" -ForegroundColor Green
+            Write-Host "    Configurando senha padrao 2772..." -ForegroundColor Yellow
+            
+            # Criar arquivo de configuracao do RustDesk com senha
+            $rustdeskConfigDir = Join-Path $env:APPDATA "RustDesk"
+            $rustdeskConfigFile = Join-Path $rustdeskConfigDir "config.toml"
+            
+            try {
+                New-Item -ItemType Directory -Force -Path $rustdeskConfigDir | Out-Null
+                $configContent = @"
+password = '2772'
+"@
+                Set-Content -Path $rustdeskConfigFile -Value $configContent -Encoding UTF8
+                Write-Host "    [OK] Senha 2772 configurada para RustDesk!" -ForegroundColor Green
+            } catch {
+                Write-Host "    [AVISO] Nao foi possivel configurar senha automaticamente: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
     }
@@ -645,9 +747,19 @@ function Install-Ollama {
             Write-Host "    Ollama instalado com sucesso via winget!" -ForegroundColor Green
             Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
             $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH permanentemente." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se Ollama ja esta instalado..." -ForegroundColor Yellow
+        if (Test-OllamaInstalled) {
+            Write-Host "    [OK] Ollama ja esta instalado" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
+            Write-Host "    [OK] Ollama adicionado ao PATH" -ForegroundColor Green
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         }
     }
     
@@ -659,9 +771,19 @@ function Install-Ollama {
             Write-Host "    Ollama instalado com sucesso via chocolatey!" -ForegroundColor Green
             Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
             $env:PATH += ";C:\ProgramData\chocolatey\bin"
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH permanentemente." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se Ollama ja esta instalado..." -ForegroundColor Yellow
+        if (Test-OllamaInstalled) {
+            Write-Host "    [OK] Ollama ja esta instalado" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
+            Write-Host "    [OK] Ollama adicionado ao PATH" -ForegroundColor Green
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         }
     }
     
@@ -681,14 +803,24 @@ function Install-Ollama {
             Remove-Item $installerPath -Force
             Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
             $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH permanentemente." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         } else {
             Write-Host "    [ERRO] Falha na instalacao do Ollama. Codigo: $($process.ExitCode)" -ForegroundColor Red
         }
     } catch {
         Write-Host "    [ERRO] Erro ao baixar/instalar Ollama: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    
+    # Se falhou tudo, verificar se ja esta instalado
+    Write-Host "    Verificando se Ollama ja esta instalado..." -ForegroundColor Yellow
+    if (Test-OllamaInstalled) {
+        Write-Host "    [OK] Ollama ja esta instalado" -ForegroundColor Green
+        Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+        $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
+        Write-Host "    [OK] Ollama adicionado ao PATH" -ForegroundColor Green
+        Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+        return $true
     }
     
     Write-Host "`n$('='*60)" -ForegroundColor Red
