@@ -10,6 +10,38 @@
 # cd $HOME/Desktop
 # Invoke-Expression (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1")
 
+# Verificar se esta executando como administrador
+function Test-Administrator {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# Se nao estiver como administrador, solicitar elevacao
+if (-not (Test-Administrator)) {
+    Write-Host "`n[!] Este script requer permissao de administrador para instalar software e configurar o PATH." -ForegroundColor Yellow
+    Write-Host "[!] Solicitando elevacao de permissao..." -ForegroundColor Yellow
+    
+    try {
+        $scriptPath = $MyInvocation.MyCommand.Path
+        if ($scriptPath) {
+            $psiArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+            Start-Process powershell -Verb RunAs -ArgumentList $psiArgs
+            exit
+        } else {
+            Write-Host "[ERRO] Nao foi possivel determinar o caminho do script para elevacao." -ForegroundColor Red
+            Write-Host "[ERRO] Execute o script como administrador manualmente." -ForegroundColor Red
+            exit 1
+        }
+    } catch {
+        Write-Host "[ERRO] Nao foi possivel solicitar elevacao: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "[ERRO] Execute o script como administrador manualmente." -ForegroundColor Red
+        exit 1
+    }
+}
+
+Write-Host "[OK] Executando como administrador" -ForegroundColor Green
+
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $userProfile = $env:USERPROFILE
