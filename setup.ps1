@@ -202,9 +202,25 @@ function Install-Java {
         $result = Invoke-CommandSafe "winget install Oracle.JDK.17 --silent --accept-package-agreements --accept-source-agreements" "Instalando Java via winget"
         if ($result) {
             Write-Host "    Java instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar Java ao PATH da sessao atual
+            $javaPaths = @(
+                "C:\Program Files\Java\jdk-17\bin",
+                "C:\Program Files\Eclipse Adoptium\jdk-17.0.8.101-hotspot\bin",
+                "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
+            )
+            
+            foreach ($javaPath in $javaPaths) {
+                if (Test-Path $javaPath) {
+                    $env:PATH = "$javaPath;$env:PATH"
+                    Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
+                    break
+                }
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         }
     }
     
@@ -214,9 +230,25 @@ function Install-Java {
         $result = Invoke-CommandSafe "choco install jdk17 -y" "Instalando Java via chocolatey"
         if ($result) {
             Write-Host "    Java instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar Java ao PATH da sessao atual
+            $javaPaths = @(
+                "C:\Program Files\Java\jdk-17\bin",
+                "C:\Program Files\Eclipse Adoptium\jdk-17.0.8.101-hotspot\bin",
+                "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
+            )
+            
+            foreach ($javaPath in $javaPaths) {
+                if (Test-Path $javaPath) {
+                    $env:PATH = "$javaPath;$env:PATH"
+                    Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
+                    break
+                }
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         }
     }
     
@@ -263,9 +295,25 @@ function Install-AndroidSdk {
         if ($result) {
             Write-Host "    Android Studio instalado com sucesso via winget!" -ForegroundColor Green
             Write-Host "    ADB esta incluido no Android Studio" -ForegroundColor Yellow
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ADB ao PATH da sessao atual
+            $adbPaths = @(
+                "$env:LOCALAPPDATA\Android\Sdk\platform-tools",
+                "C:\Android\Sdk\platform-tools",
+                "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools"
+            )
+            
+            foreach ($adbPath in $adbPaths) {
+                if (Test-Path $adbPath) {
+                    $env:PATH = "$adbPath;$env:PATH"
+                    Write-Host "    [OK] ADB adicionado ao PATH: $adbPath" -ForegroundColor Green
+                    break
+                }
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         }
     }
     
@@ -275,9 +323,25 @@ function Install-AndroidSdk {
         $result = Invoke-CommandSafe "choco install android-sdk -y" "Instalando Android SDK via chocolatey"
         if ($result) {
             Write-Host "    Android SDK instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
+            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ADB ao PATH da sessao atual
+            $adbPaths = @(
+                "$env:LOCALAPPDATA\Android\Sdk\platform-tools",
+                "C:\Android\Sdk\platform-tools",
+                "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools"
+            )
+            
+            foreach ($adbPath in $adbPaths) {
+                if (Test-Path $adbPath) {
+                    $env:PATH = "$adbPath;$env:PATH"
+                    Write-Host "    [OK] ADB adicionado ao PATH: $adbPath" -ForegroundColor Green
+                    break
+                }
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
         }
     }
     
