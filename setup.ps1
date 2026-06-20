@@ -235,6 +235,7 @@ function Test-JavaInstalled {
         "C:\Program Files\Eclipse Adoptium\jdk-21.*\bin\java.exe",
         "C:\Program Files\Eclipse Adoptium\Temurin\jdk-17.*\bin\java.exe",
         "C:\Program Files\Eclipse Adoptium\Temurin\jdk-21.*\bin\java.exe",
+        "C:\Program Files\Eclipse Adoptium\*\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-21.*\bin\java.exe",
