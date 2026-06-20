@@ -216,26 +216,36 @@ function Test-JavaInstalled {
     # Tentar Get-Command primeiro (mais confiável)
     $javaCmd = Get-Command java -ErrorAction SilentlyContinue
     if ($javaCmd) {
+        $prevErrorAction = $ErrorActionPreference
+        $ErrorActionPreference = "SilentlyContinue"
         try {
             $result = & $javaCmd.Source -version 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "    Java encontrado: $($javaCmd.Source)" -ForegroundColor Green
+                $ErrorActionPreference = $prevErrorAction
                 return $javaCmd.Source
             }
         } catch {
             # Continuar para verificar caminhos específicos
+        } finally {
+            $ErrorActionPreference = $prevErrorAction
         }
     }
     
     # Tentar comando direto (java no PATH)
+    $prevErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
     try {
         $result = java -version 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "    Java encontrado no PATH: java" -ForegroundColor Green
+            $ErrorActionPreference = $prevErrorAction
             return "java"
         }
     } catch {
         # Continuar para verificar caminhos específicos
+    } finally {
+        $ErrorActionPreference = $prevErrorAction
     }
     
     $javaPaths = @(
