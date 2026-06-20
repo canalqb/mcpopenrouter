@@ -269,6 +269,21 @@ function Install-Java {
             return $true
         }
         
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se Java ja esta instalado..." -ForegroundColor Yellow
+        $javaPath = Test-JavaInstalled
+        if ($javaPath) {
+            Write-Host "    [OK] Java ja esta instalado: $javaPath" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ao PATH
+            $javaDir = Split-Path $javaPath -Parent
+            $env:PATH = "$javaDir;$env:PATH"
+            Write-Host "    [OK] Java adicionado ao PATH: $javaDir" -ForegroundColor Green
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
         # Tentar Oracle JDK como alternativa
         Write-Host "    Tentando Oracle JDK como alternativa..." -ForegroundColor Yellow
         $result = Invoke-CommandSafe "winget install Oracle.JDK.17 --silent --accept-package-agreements --accept-source-agreements" "Instalando Java (Oracle) via winget"
@@ -290,6 +305,21 @@ function Install-Java {
                 }
             }
             
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Se falhou novamente, verificar se ja esta instalado
+        Write-Host "    Verificando se Java ja esta instalado..." -ForegroundColor Yellow
+        $javaPath = Test-JavaInstalled
+        if ($javaPath) {
+            Write-Host "    [OK] Java ja esta instalado: $javaPath" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ao PATH
+            $javaDir = Split-Path $javaPath -Parent
+            $env:PATH = "$javaDir;$env:PATH"
+            Write-Host "    [OK] Java adicionado ao PATH: $javaDir" -ForegroundColor Green
             Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
@@ -324,6 +354,21 @@ function Install-Java {
                 }
             }
             
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Se falhou, verificar se ja esta instalado
+        Write-Host "    Verificando se Java ja esta instalado..." -ForegroundColor Yellow
+        $javaPath = Test-JavaInstalled
+        if ($javaPath) {
+            Write-Host "    [OK] Java ja esta instalado: $javaPath" -ForegroundColor Green
+            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar ao PATH
+            $javaDir = Split-Path $javaPath -Parent
+            $env:PATH = "$javaDir;$env:PATH"
+            Write-Host "    [OK] Java adicionado ao PATH: $javaDir" -ForegroundColor Green
             Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
