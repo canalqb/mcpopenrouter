@@ -1103,9 +1103,16 @@ function Request-OpenRouterToken {
 function Install-PythonDependencies {
     $requirementsFile = Join-Path $scriptDir "requirements.txt"
     
+    # Se requirements.txt nao existe no Desktop, tentar copiar do repositório
     if (-not (Test-Path $requirementsFile)) {
-        Write-Host "    [ERRO] Arquivo requirements.txt nao encontrado" -ForegroundColor Red
-        return $false
+        $repoRequirementsFile = "C:\Users\Qb\Desktop\mcp\requirements.txt"
+        if (Test-Path $repoRequirementsFile) {
+            Write-Host "    Copiando requirements.txt do repositório..." -ForegroundColor Yellow
+            Copy-Item $repoRequirementsFile $requirementsFile
+        } else {
+            Write-Host "    [ERRO] Arquivo requirements.txt nao encontrado" -ForegroundColor Red
+            return $false
+        }
     }
     
     return Invoke-CommandSafe "& `"$pythonPath`" -m pip install -r `"$requirementsFile`"" "Instalando dependencias Python"
