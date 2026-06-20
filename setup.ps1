@@ -175,11 +175,48 @@ function Test-JavaInstalled {
     $javaPaths = @(
         "C:\Program Files\Java\jdk-17\bin\java.exe",
         "C:\Program Files\Java\jdk-21\bin\java.exe",
+        "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin\java.exe",
+        "C:\Program Files\Eclipse Adoptium\jdk-21.*\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin\java.exe",
+        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin\java.exe",
+        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-21.*\bin\java.exe",
         "java"
     )
     
     foreach ($path in $javaPaths) {
+        # Tentar resolver wildcard paths
+        if ($path -like "*\*") {
+            $resolvedPaths = Get-ChildItem $path -ErrorAction SilentlyContinue
+            if ($resolvedPaths) {
+                foreach ($resolvedPath in $resolvedPaths) {
+                    try {
+                        $result = & $resolvedPath.FullName -version 2>&1
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Host "    Java encontrado: $($resolvedPath.FullName)" -ForegroundColor Green
+                            return $resolvedPath.FullName
+                        }
+                    } catch {
+                        continue
+                    }
+                }
+            }
+            continue
+        }
+        
+        # Tentar caminho direto
+        if (Test-Path $path) {
+            try {
+                $result = & $path -version 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "    Java encontrado: $path" -ForegroundColor Green
+                    return $path
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        # Tentar comando direto (java)
         try {
             $result = & $path -version 2>&1
             if ($LASTEXITCODE -eq 0) {
