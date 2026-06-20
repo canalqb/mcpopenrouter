@@ -2,13 +2,20 @@
 # PowerShell Script - Windows Compatible
 #
 # INSTALACAO VIA POWERSHELL:
-# cd $HOME\Desktop
+# cd $HOME/Desktop
 # Invoke-WebRequest -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1" -OutFile "setup.ps1"
 # powershell -ExecutionPolicy Bypass -File setup.ps1
 #
 # OU INSTALACAO DIRETA:
 # cd $HOME/Desktop
 # Invoke-Expression (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1")
+#
+# PARA TESTE LOCAL (pular verificação de administrador):
+# powershell -ExecutionPolicy Bypass -File setup.ps1 -SkipAdminCheck
+
+param(
+    [switch]$SkipAdminCheck
+)
 
 # Verificar se esta executando como administrador
 function Test-Administrator {
@@ -17,8 +24,8 @@ function Test-Administrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Se nao estiver como administrador, solicitar elevacao
-if (-not (Test-Administrator)) {
+# Se nao estiver como administrador, solicitar elevacao (a menos que SkipAdminCheck seja usado)
+if (-not $SkipAdminCheck -and -not (Test-Administrator)) {
     Write-Host "`n[!] Este script requer permissao de administrador para instalar software e configurar o PATH." -ForegroundColor Yellow
     Write-Host "[!] Solicitando elevacao de permissao..." -ForegroundColor Yellow
     
@@ -40,7 +47,11 @@ if (-not (Test-Administrator)) {
     }
 }
 
-Write-Host "[OK] Executando como administrador" -ForegroundColor Green
+if ($SkipAdminCheck) {
+    Write-Host "[AVISO] Verificação de administrador desabilitada (modo de teste)" -ForegroundColor Yellow
+} else {
+    Write-Host "[OK] Executando como administrador" -ForegroundColor Green
+}
 
 $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -53,7 +64,7 @@ $pythonInstallerUrl = "https://www.python.org/ftp/python/3.8.10/python-3.8.10-am
 
 function Write-Step {
     param([int]$StepNum, [int]$TotalSteps, [string]$Message)
-    $percentComplete = [math]::Round(($StepNum / $TotalSteps) * 100, 0)
+    $percentComplete = [math]::Min([math]::Round(($StepNum / $TotalSteps) * 100, 0), 100)
     Write-Progress -Activity "Configuracao Automatica" -Status "PASSO ${StepNum}/${TotalSteps}: $Message" -PercentComplete $percentComplete
     Write-Host "`n$('='*60)" -ForegroundColor Cyan
     Write-Host "PASSO ${StepNum}/${TotalSteps} ($percentComplete%): $Message" -ForegroundColor Cyan
@@ -459,21 +470,44 @@ function Install-Java {
 }
 
 function Test-AdbInstalled {
+    # Tentar Get-Command primeiro (mais confiável)
+    $adbCmd = Get-Command adb -ErrorAction SilentlyContinue
+    if ($adbCmd) {
+        $prevErrorAction = $ErrorActionPreference
+        $ErrorActionPreference = "SilentlyContinue"
+        try {
+            $result = & $adbCmd.Source version 2>&1
+            $ErrorActionPreference = $prevErrorAction
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "    ADB encontrado via Get-Command: $($adbCmd.Source)" -ForegroundColor Green
+                return $adbCmd.Source
+            }
+        } catch {
+            $ErrorActionPreference = $prevErrorAction
+        }
+    }
+    
+    # Tentar caminhos específicos
     $adbPaths = @(
         "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe",
         "C:\Android\Sdk\platform-tools\adb.exe",
-        "adb"
+        "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools\adb.exe"
     )
     
     foreach ($path in $adbPaths) {
-        try {
-            $result = & $path version 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "    ADB encontrado: $path" -ForegroundColor Green
-                return $path
+        if (Test-Path $path) {
+            try {
+                $prevErrorAction = $ErrorActionPreference
+                $ErrorActionPreference = "SilentlyContinue"
+                $result = & $path version 2>&1
+                $ErrorActionPreference = $prevErrorAction
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "    ADB encontrado: $path" -ForegroundColor Green
+                    return $path
+                }
+            } catch {
+                $ErrorActionPreference = $prevErrorAction
             }
-        } catch {
-            continue
         }
     }
     return $null
@@ -570,6 +604,15 @@ function Install-AndroidSdk {
             Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
             return $true
         }
+    }
+    
+    # Verificar se Android Studio ja esta instalado via winget
+    $androidStudioInstalled = winget list | Select-String "AndroidStudio"
+    if ($androidStudioInstalled) {
+        Write-Host "    [AVISO] Android Studio ja esta instalado, mas ADB nao foi encontrado no PATH" -ForegroundColor Yellow
+        Write-Host "    [AVISO] Voce precisara configurar o ADB manualmente se necessario" -ForegroundColor Yellow
+        Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+        return $true
     }
     
     Write-Host "`n$('='*60)" -ForegroundColor Red
@@ -771,6 +814,12 @@ password = '2772'
             return $true
         }
     }
+    
+    # RustDesk nao e essencial para o funcionamento, continuar mesmo se nao for encontrado
+    Write-Host "    [AVISO] RustDesk nao foi encontrado, mas nao e essencial para o funcionamento" -ForegroundColor Yellow
+    Write-Host "    [AVISO] Voce pode instalar RustDesk manualmente depois se necessario" -ForegroundColor Yellow
+    Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+    return $true
     
     Write-Host "`n$('='*60)" -ForegroundColor Red
     Write-Host "INSTALACAO MANUAL DO RUSTDESK NECESSARIA" -ForegroundColor Red
