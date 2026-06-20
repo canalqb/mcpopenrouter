@@ -53,8 +53,10 @@ $pythonInstallerUrl = "https://www.python.org/ftp/python/3.8.10/python-3.8.10-am
 
 function Write-Step {
     param([int]$StepNum, [int]$TotalSteps, [string]$Message)
+    $percentComplete = [math]::Round(($StepNum / $TotalSteps) * 100, 0)
+    Write-Progress -Activity "Configuracao Automatica" -Status "PASSO ${StepNum}/${TotalSteps}: $Message" -PercentComplete $percentComplete
     Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "PASSO ${StepNum}/${TotalSteps}: $Message" -ForegroundColor Cyan
+    Write-Host "PASSO ${StepNum}/${TotalSteps} ($percentComplete%): $Message" -ForegroundColor Cyan
     Write-Host $('='*60) -ForegroundColor Cyan
 }
 
@@ -62,6 +64,7 @@ function Invoke-CommandSafe {
     param([string]$Command, [string]$Description)
     Write-Host "`n[+] Executando: $Description" -ForegroundColor Yellow
     Write-Host "    Comando: $Command" -ForegroundColor Gray
+    Write-Progress -Activity "Executando comando" -Status $Description -PercentComplete -1
     
     try {
         $output = Invoke-Expression $Command 2>&1
@@ -108,10 +111,12 @@ function Test-PythonInstalled {
 
 function Install-Python {
     Write-Host "`n[+] Instalando Python $pythonVersion automaticamente..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Python" -Status "Preparando instalacao" -PercentComplete 0
     
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar Python..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Python" -Status "Baixando via winget" -PercentComplete 20
         $result = Invoke-CommandSafe "winget install Python.Python.3.8 --silent --accept-package-agreements --accept-source-agreements" "Instalando Python via winget"
         if ($result) {
             Write-Host "    Python instalado com sucesso via winget!" -ForegroundColor Green
@@ -124,6 +129,7 @@ function Install-Python {
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar Python..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Python" -Status "Baixando via chocolatey" -PercentComplete 20
         $result = Invoke-CommandSafe "choco install python3.8 -y" "Instalando Python via chocolatey"
         if ($result) {
             Write-Host "    Python instalado com sucesso via chocolatey!" -ForegroundColor Green
@@ -134,11 +140,13 @@ function Install-Python {
     }
     
     Write-Host "    Baixando instalador do Python..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Python" -Status "Baixando instalador" -PercentComplete 10
     $installerPath = Join-Path $scriptDir "python-installer.exe"
     
     try {
         Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $installerPath -UseBasicParsing
         Write-Host "    [OK] Download concluido!" -ForegroundColor Green
+        Write-Progress -Activity "Instalando Python" -Status "Instalando" -PercentComplete 50
         
         Write-Host "    Instalando Python..." -ForegroundColor Yellow
         $process = Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_test=0" -Wait -PassThru
@@ -265,10 +273,12 @@ function Test-JavaInstalled {
 
 function Install-Java {
     Write-Host "`n[+] Instalando Java automaticamente..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Java" -Status "Preparando instalacao" -PercentComplete 0
     
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar Java..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Java" -Status "Baixando via winget" -PercentComplete 20
         
         # Tentar Eclipse Adoptium (Temurin) primeiro - mais confiavel
         $result = Invoke-CommandSafe "winget install EclipseAdoptium.Temurin.17.JDK --silent --accept-package-agreements --accept-source-agreements" "Instalando Java (Eclipse Adoptium) via winget"
@@ -361,6 +371,7 @@ function Install-Java {
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar Java..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Java" -Status "Baixando via chocolatey" -PercentComplete 20
         $result = Invoke-CommandSafe "choco install temurin17 -y" "Instalando Java via chocolatey"
         if ($result) {
             Write-Host "    Java instalado com sucesso via chocolatey!" -ForegroundColor Green
@@ -442,10 +453,12 @@ function Test-AdbInstalled {
 
 function Install-AndroidSdk {
     Write-Host "`n[+] Instalando Android SDK automaticamente..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Android SDK" -Status "Preparando instalacao" -PercentComplete 0
     
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar Android SDK..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Android SDK" -Status "Baixando via winget" -PercentComplete 20
         $result = Invoke-CommandSafe "winget install Google.AndroidStudio --silent --accept-package-agreements --accept-source-agreements" "Instalando Android Studio via winget"
         if ($result) {
             Write-Host "    Android Studio instalado com sucesso via winget!" -ForegroundColor Green
@@ -490,6 +503,7 @@ function Install-AndroidSdk {
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar Android SDK..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Android SDK" -Status "Baixando via chocolatey" -PercentComplete 20
         $result = Invoke-CommandSafe "choco install android-sdk -y" "Instalando Android SDK via chocolatey"
         if ($result) {
             Write-Host "    Android SDK instalado com sucesso via chocolatey!" -ForegroundColor Green
@@ -561,10 +575,12 @@ function Test-NotepadPlusPlusInstalled {
 
 function Install-NotepadPlusPlus {
     Write-Host "`n[+] Instalando Notepad++ automaticamente..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Notepad++" -Status "Preparando instalacao" -PercentComplete 0
     
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar Notepad++..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Notepad++" -Status "Baixando via winget" -PercentComplete 20
         $result = Invoke-CommandSafe "winget install Notepad++.Notepad++ --silent --accept-package-agreements --accept-source-agreements" "Instalando Notepad++ via winget"
         if ($result) {
             Write-Host "    Notepad++ instalado com sucesso via winget!" -ForegroundColor Green
@@ -584,6 +600,7 @@ function Install-NotepadPlusPlus {
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar Notepad++..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Notepad++" -Status "Baixando via chocolatey" -PercentComplete 20
         $result = Invoke-CommandSafe "choco install notepadplusplus -y" "Instalando Notepad++ via chocolatey"
         if ($result) {
             Write-Host "    Notepad++ instalado com sucesso via chocolatey!" -ForegroundColor Green
@@ -630,10 +647,12 @@ function Test-RustDeskInstalled {
 
 function Install-RustDesk {
     Write-Host "`n[+] Instalando RustDesk automaticamente..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando RustDesk" -Status "Preparando instalacao" -PercentComplete 0
     
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar RustDesk..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando RustDesk" -Status "Baixando via winget" -PercentComplete 20
         $result = Invoke-CommandSafe "winget install RustDesk.RustDesk --silent --accept-package-agreements --accept-source-agreements" "Instalando RustDesk via winget"
         if ($result) {
             Write-Host "    RustDesk instalado com sucesso via winget!" -ForegroundColor Green
@@ -689,6 +708,7 @@ password = '2772'
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar RustDesk..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando RustDesk" -Status "Baixando via chocolatey" -PercentComplete 20
         $result = Invoke-CommandSafe "choco install rustdesk -y" "Instalando RustDesk via chocolatey"
         if ($result) {
             Write-Host "    RustDesk instalado com sucesso via chocolatey!" -ForegroundColor Green
@@ -738,10 +758,12 @@ password = '2772'
 
 function Install-Ollama {
     Write-Host "`n[+] Instalando Ollama automaticamente..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Ollama" -Status "Preparando instalacao" -PercentComplete 0
     
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar Ollama..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Ollama" -Status "Baixando via winget" -PercentComplete 20
         $result = Invoke-CommandSafe "winget install Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements" "Instalando Ollama via winget"
         if ($result) {
             Write-Host "    Ollama instalado com sucesso via winget!" -ForegroundColor Green
@@ -766,6 +788,7 @@ function Install-Ollama {
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar Ollama..." -ForegroundColor Yellow
+        Write-Progress -Activity "Instalando Ollama" -Status "Baixando via chocolatey" -PercentComplete 20
         $result = Invoke-CommandSafe "choco install ollama -y" "Instalando Ollama via chocolatey"
         if ($result) {
             Write-Host "    Ollama instalado com sucesso via chocolatey!" -ForegroundColor Green
@@ -788,12 +811,14 @@ function Install-Ollama {
     }
     
     Write-Host "    Baixando instalador do Ollama..." -ForegroundColor Yellow
+    Write-Progress -Activity "Instalando Ollama" -Status "Baixando instalador" -PercentComplete 10
     $installerUrl = "https://ollama.com/download/OllamaSetup.exe"
     $installerPath = Join-Path $scriptDir "ollama-installer.exe"
     
     try {
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
         Write-Host "    [OK] Download concluido!" -ForegroundColor Green
+        Write-Progress -Activity "Instalando Ollama" -Status "Instalando" -PercentComplete 50
         
         Write-Host "    Instalando Ollama..." -ForegroundColor Yellow
         $process = Start-Process -FilePath $installerPath -ArgumentList "/silent" -Wait -PassThru
