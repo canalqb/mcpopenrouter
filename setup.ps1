@@ -213,15 +213,25 @@ function Test-OllamaInstalled {
 }
 
 function Test-JavaInstalled {
-    # Tentar comando direto primeiro (java no PATH)
+    # Tentar Get-Command primeiro (mais confiável)
+    $javaCmd = Get-Command java -ErrorAction SilentlyContinue
+    if ($javaCmd) {
+        try {
+            $result = & $javaCmd.Source -version 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "    Java encontrado: $($javaCmd.Source)" -ForegroundColor Green
+                return $javaCmd.Source
+            }
+        } catch {
+            # Continuar para verificar caminhos específicos
+        }
+    }
+    
+    # Tentar comando direto (java no PATH)
     try {
         $result = java -version 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "    Java encontrado no PATH: java" -ForegroundColor Green
-            $javaPath = (Get-Command java -ErrorAction SilentlyContinue).Source
-            if ($javaPath) {
-                return $javaPath
-            }
             return "java"
         }
     } catch {
