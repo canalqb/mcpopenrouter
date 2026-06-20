@@ -282,6 +282,8 @@ class SetupManager:
         print("2. As ferramentas MCP estarao disponiveis no Cascade")
         print(f"3. Para testar o cliente Python: {self.python_path} mcp-client.py")
         print(f"4. Para uso automatizado: {self.python_path} mcp-client.py \"sua pergunta\"")
+        print("5. Instalar OpenCode: npm i -g opencode-ai@latest")
+        print("6. Usar OpenCode: opencode --model ollama/antigravity-sonnet")
     
     def run(self):
         """Executa todo o processo de configuracao"""

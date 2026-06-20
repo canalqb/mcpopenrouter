@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "openrouter": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-openrouter",
+        "--model",
+        "ollama/antigravity-sonnet"
+      ],
+      "env": {
+        "OPENROUTER_API_KEY": ""
+      }
+    }
+  }
+}

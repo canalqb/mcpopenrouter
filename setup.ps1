@@ -1,102 +1,92 @@
-# Script de Configuracao 100% Automatica para MCP + OpenRouter + Devin
+﻿# Script de Configuracao Automatica para MCP + OpenRouter + Windsurf
 # PowerShell Script - Windows Compatible
 #
-# INSTALACAO VIA POWERSHELL:
-# cd $HOME/Desktop
-# Invoke-WebRequest -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1" -OutFile "setup.ps1"
-# powershell -ExecutionPolicy Bypass -File setup.ps1
-#
-# OU INSTALACAO DIRETA:
-# cd $HOME/Desktop
-# Invoke-Expression (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1")
-#
-# PARA TESTE LOCAL (pular verificação de administrador):
-# powershell -ExecutionPolicy Bypass -File setup.ps1 -SkipAdminCheck
+# Uso:
+#   powershell -ExecutionPolicy Bypass -File setup.ps1
+#   powershell -ExecutionPolicy Bypass -File setup.ps1 -SkipAdminCheck
 
 param(
     [switch]$SkipAdminCheck
 )
 
-# Verificar se esta executando como administrador
+# ============================= CONFIGURACAO =============================
+
+$pythonVersion = "3.8.10"
+$pythonInstallerUrl = "https://www.python.org/ftp/python/3.8.10/python-3.8.10-amd64.exe"
+
+# ============================= FUNCOES AUXILIARES =============================
+
 function Test-Administrator {
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Se nao estiver como administrador, solicitar elevacao (a menos que SkipAdminCheck seja usado)
-if (-not $SkipAdminCheck -and -not (Test-Administrator)) {
-    Write-Host "`n[!] Este script requer permissao de administrador para instalar software e configurar o PATH." -ForegroundColor Yellow
-    Write-Host "[!] Solicitando elevacao de permissao..." -ForegroundColor Yellow
-    
-    try {
-        $scriptPath = $MyInvocation.MyCommand.Path
-        if ($scriptPath) {
-            $psiArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
-            Start-Process powershell -Verb RunAs -ArgumentList $psiArgs
-            exit
-        } else {
-            Write-Host "[ERRO] Nao foi possivel determinar o caminho do script para elevacao." -ForegroundColor Red
-            Write-Host "[ERRO] Execute o script como administrador manualmente." -ForegroundColor Red
-            exit 1
-        }
-    } catch {
-        Write-Host "[ERRO] Nao foi possivel solicitar elevacao: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "[ERRO] Execute o script como administrador manualmente." -ForegroundColor Red
-        exit 1
-    }
+function Write-Banner {
+    param([string]$Title, [string]$Color = "Cyan")
+    $line = "=" * 60
+    Write-Host "`n$line" -ForegroundColor $Color
+    Write-Host $Title -ForegroundColor $Color
+    Write-Host $line -ForegroundColor $Color
 }
 
-if ($SkipAdminCheck) {
-    Write-Host "[AVISO] Verificação de administrador desabilitada (modo de teste)" -ForegroundColor Yellow
-} else {
-    Write-Host "[OK] Executando como administrador" -ForegroundColor Green
+function Write-Result {
+    param([string]$Message, [string]$Status = "OK")
+    $symbol = if ($Status -eq "OK") { "[OK]" } else { "[ERRO]" }
+    $color = if ($Status -eq "OK") { "Green" } else { "Red" }
+    if ($Status -eq "AVISO") { $symbol = "[AVISO]"; $color = "Yellow" }
+    Write-Host "    $symbol $Message" -ForegroundColor $color
 }
-
-$ErrorActionPreference = "Stop"
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$userProfile = $env:USERPROFILE
-$devinConfigDir = Join-Path $userProfile ".codeium\windsurf"
-$mcpConfigFile = Join-Path $devinConfigDir "mcp_config.json"
-$envFile = Join-Path $scriptDir ".env"
-$pythonVersion = "3.8.10"
-$pythonInstallerUrl = "https://www.python.org/ftp/python/3.8.10/python-3.8.10-amd64.exe"
 
 function Write-Step {
     param([int]$StepNum, [int]$TotalSteps, [string]$Message)
     $percentComplete = [math]::Min([math]::Round(($StepNum / $TotalSteps) * 100, 0), 100)
-    Write-Progress -Activity "Configuracao Automatica" -Status "PASSO ${StepNum}/${TotalSteps}: $Message" -PercentComplete $percentComplete
-    Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "PASSO ${StepNum}/${TotalSteps} ($percentComplete%): $Message" -ForegroundColor Cyan
-    Write-Host $('='*60) -ForegroundColor Cyan
+    Write-Progress -Activity "Instalacao Automatica" -Status "${StepNum}/${TotalSteps}: $Message" -PercentComplete $percentComplete
+    Write-Host "`n" -NoNewline
+    Write-Host ("=" * 60) -ForegroundColor DarkCyan
+    Write-Host " PASSO $StepNum/$TotalSteps ($($percentComplete)%) - $Message" -ForegroundColor Cyan
+    Write-Host ("=" * 60) -ForegroundColor DarkCyan
 }
 
-function Invoke-CommandSafe {
-    param([string]$Command, [string]$Description)
-    Write-Host "`n[+] Executando: $Description" -ForegroundColor Yellow
-    Write-Host "    Comando: $Command" -ForegroundColor Gray
-    Write-Progress -Activity "Executando comando" -Status $Description -PercentComplete -1
-    
+function Invoke-Safe {
+    param(
+        [scriptblock]$ScriptBlock,
+        [string]$Description = ""
+    )
+
+    if ($Description) {
+        Write-Host "  > $Description..." -ForegroundColor Yellow
+    }
+
+    $output = $null
+    $success = $false
+
     try {
-        $output = Invoke-Expression $Command 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "    [OK] Sucesso!" -ForegroundColor Green
-            if ($output) {
-                $outputStr = $output | Out-String
-                Write-Host "    Saida: $($outputStr.Substring(0, [Math]::Min(200, $outputStr.Length)))" -ForegroundColor Gray
-            }
-            return $true
-        } else {
-            Write-Host "    [ERRO] Falha!" -ForegroundColor Red
-            $errorStr = $output | Out-String
-            Write-Host "    Erro: $($errorStr.Substring(0, [Math]::Min(200, $errorStr.Length)))" -ForegroundColor Red
-            return $false
+        $output = & $ScriptBlock 2>&1
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0 -or $exitCode -eq $null) {
+            $success = $true
         }
     } catch {
-        Write-Host "    [ERRO] Excecao: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
+        $output = $_.Exception.Message
+        $success = $false
     }
+
+    if ($success) {
+        Write-Result "$Description concluido" "OK"
+    } else {
+        Write-Result "$Description falhou" "ERRO"
+        if ($output) {
+            $outputStr = $output | Out-String
+            $truncated = $outputStr.Substring(0, [Math]::Min(300, $outputStr.Length))
+            Write-Host "       Detalhe: $truncated" -ForegroundColor DarkRed
+        }
+    }
+
+    return @{ Success = $success; Output = $output }
 }
+
+# ============================= FUNCOES DE VERIFICACAO =============================
 
 function Test-PythonInstalled {
     $pythonPaths = @(
@@ -105,12 +95,12 @@ function Test-PythonInstalled {
         "$env:LOCALAPPDATA\Programs\Python\Python38\python.exe",
         "python"
     )
-    
+
     foreach ($path in $pythonPaths) {
         try {
             $result = & $path --version 2>&1
             if ($LASTEXITCODE -eq 0 -and $result -match "3\.8\.") {
-                Write-Host "    Python encontrado: $path" -ForegroundColor Green
+                Write-Result "Python encontrado: $path" "OK"
                 return $path
             }
         } catch {
@@ -120,162 +110,55 @@ function Test-PythonInstalled {
     return $null
 }
 
-function Install-Python {
-    Write-Host "`n[+] Instalando Python $pythonVersion automaticamente..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Python" -Status "Preparando instalacao" -PercentComplete 0
-    
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar Python..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Python" -Status "Baixando via winget" -PercentComplete 20
-        $result = Invoke-CommandSafe "winget install Python.Python.3.8 --silent --accept-package-agreements --accept-source-agreements" "Instalando Python via winget"
-        if ($result) {
-            Write-Host "    Python instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
-        }
-    }
-    
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar Python..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Python" -Status "Baixando via chocolatey" -PercentComplete 20
-        $result = Invoke-CommandSafe "choco install python3.8 -y" "Instalando Python via chocolatey"
-        if ($result) {
-            Write-Host "    Python instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
-        }
-    }
-    
-    Write-Host "    Baixando instalador do Python..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Python" -Status "Baixando instalador" -PercentComplete 10
-    $installerPath = Join-Path $scriptDir "python-installer.exe"
-    
-    try {
-        Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $installerPath -UseBasicParsing
-        Write-Host "    [OK] Download concluido!" -ForegroundColor Green
-        Write-Progress -Activity "Instalando Python" -Status "Instalando" -PercentComplete 50
-        
-        Write-Host "    Instalando Python..." -ForegroundColor Yellow
-        $process = Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_test=0" -Wait -PassThru
-        
-        if ($process.ExitCode -eq 0) {
-            Write-Host "    [OK] Python instalado com sucesso!" -ForegroundColor Green
-            Remove-Item $installerPath -Force
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
-        } else {
-            Write-Host "    [ERRO] Falha na instalacao do Python. Codigo: $($process.ExitCode)" -ForegroundColor Red
-        }
-    } catch {
-        Write-Host "    [ERRO] Erro ao baixar/instalar Python: $($_.Exception.Message)" -ForegroundColor Red
-    }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO PYTHON NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://www.python.org/downloads/release/python-3810/" -ForegroundColor Cyan
-    Write-Host "2. Baixe 'Windows installer (64-bit)'" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Marque 'Add Python to PATH'" -ForegroundColor Cyan
-    Write-Host "5. Apos a instalacao, feche e reabra este terminal" -ForegroundColor Cyan
-    Write-Host "6. Execute este script novamente" -ForegroundColor Cyan
-    exit 1
-}
-
 function Test-NodeInstalled {
-    # Tenta encontrar em locais comuns primeiro (evita erro de PATH)
     $nodePaths = @(
         "C:\Program Files\nodejs\node.exe",
         "C:\nodejs\node.exe",
         "$env:APPDATA\npm\node.exe"
     )
-    
+
     foreach ($path in $nodePaths) {
         if (Test-Path $path) {
-            Write-Host "    Node.js encontrado em: $path" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH temporariamente..." -ForegroundColor Yellow
+            Write-Result "Node.js encontrado: $path" "OK"
             $nodeDir = Split-Path $path -Parent
             $env:PATH = "$nodeDir;$env:PATH"
             return $true
         }
     }
-    
-    # Se não encontrou, tenta via PATH
-    $result = Invoke-CommandSafe "node -v" "Verificando Node.js via PATH"
-    if ($result) {
-        return $true
-    }
-    
-    return $false
-}
 
-function Test-NpxInstalled {
-    return Invoke-CommandSafe "npx -v" "Verificando npx"
-}
-
-function Test-OllamaInstalled {
-    return Invoke-CommandSafe "ollama -v" "Verificando Ollama"
+    $result = Invoke-Safe { node -v } "Verificar Node.js via PATH"
+    return $result.Success
 }
 
 function Test-JavaInstalled {
-    # Tentar Get-Command primeiro (mais confiável)
     $javaCmd = Get-Command java -ErrorAction SilentlyContinue
     if ($javaCmd) {
-        $prevErrorAction = $ErrorActionPreference
-        $ErrorActionPreference = "SilentlyContinue"
         try {
             $result = & $javaCmd.Source -version 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "    Java encontrado: $($javaCmd.Source)" -ForegroundColor Green
-                $ErrorActionPreference = $prevErrorAction
+                Write-Result "Java encontrado: $($javaCmd.Source)" "OK"
                 return $javaCmd.Source
             }
-        } catch {
-            # Continuar para verificar caminhos específicos
-        } finally {
-            $ErrorActionPreference = $prevErrorAction
-        }
+        } catch { }
     }
-    
-    # Tentar comando direto (java no PATH)
-    $prevErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = "SilentlyContinue"
+
     try {
         $result = java -version 2>&1
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "    Java encontrado no PATH: java" -ForegroundColor Green
-            $ErrorActionPreference = $prevErrorAction
+            Write-Result "Java encontrado no PATH" "OK"
             return "java"
         }
-    } catch {
-        # Continuar para verificar caminhos específicos
-    } finally {
-        $ErrorActionPreference = $prevErrorAction
-    }
-    
+    } catch { }
+
     $javaPaths = @(
-        "C:\Program Files\Java\jdk-17\bin\java.exe",
-        "C:\Program Files\Java\jdk-21\bin\java.exe",
         "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin\java.exe",
-        "C:\Program Files\Eclipse Adoptium\jdk-21.*\bin\java.exe",
+        "C:\Program Files\Java\jdk-17\bin\java.exe",
         "C:\Program Files\Eclipse Adoptium\Temurin\jdk-17.*\bin\java.exe",
-        "C:\Program Files\Eclipse Adoptium\Temurin\jdk-21.*\bin\java.exe",
-        "C:\Program Files\Eclipse Adoptium\*\bin\java.exe",
-        "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin\java.exe",
         "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin\java.exe",
-        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-21.*\bin\java.exe",
-        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\Temurin\jdk-17.*\bin\java.exe",
-        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\Temurin\jdk-21.*\bin\java.exe"
+        "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin\java.exe"
     )
-    
+
     foreach ($path in $javaPaths) {
-        # Tentar resolver wildcard paths
         if ($path -like "*\*") {
             $resolvedPaths = Get-ChildItem $path -ErrorAction SilentlyContinue
             if ($resolvedPaths) {
@@ -283,703 +166,474 @@ function Test-JavaInstalled {
                     try {
                         $result = & $resolvedPath.FullName -version 2>&1
                         if ($LASTEXITCODE -eq 0) {
-                            Write-Host "    Java encontrado: $($resolvedPath.FullName)" -ForegroundColor Green
+                            Write-Result "Java encontrado: $($resolvedPath.FullName)" "OK"
                             return $resolvedPath.FullName
                         }
-                    } catch {
-                        continue
-                    }
+                    } catch { }
                 }
             }
             continue
         }
-        
-        # Tentar caminho direto
+
         if (Test-Path $path) {
             try {
                 $result = & $path -version 2>&1
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "    Java encontrado: $path" -ForegroundColor Green
+                    Write-Result "Java encontrado: $path" "OK"
                     return $path
                 }
-            } catch {
-                continue
-            }
+            } catch { }
         }
     }
     return $null
-}
-
-function Install-Java {
-    Write-Host "`n[+] Instalando Java automaticamente..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Java" -Status "Preparando instalacao" -PercentComplete 0
-    
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar Java..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Java" -Status "Baixando via winget" -PercentComplete 20
-        
-        # Tentar Eclipse Adoptium (Temurin) primeiro - mais confiavel
-        $result = Invoke-CommandSafe "winget install EclipseAdoptium.Temurin.17.JDK --silent --accept-package-agreements --accept-source-agreements" "Instalando Java (Eclipse Adoptium) via winget"
-        if ($result) {
-            Write-Host "    Java instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar Java ao PATH da sessao atual
-            $javaPaths = @(
-                "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin",
-                "C:\Program Files\Java\jdk-17\bin",
-                "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin",
-                "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
-            )
-            
-            foreach ($javaPath in $javaPaths) {
-                $resolvedPath = Resolve-Path $javaPath -ErrorAction SilentlyContinue
-                if ($resolvedPath) {
-                    $env:PATH = "$resolvedPath;$env:PATH"
-                    Write-Host "    [OK] Java adicionado ao PATH: $resolvedPath" -ForegroundColor Green
-                    break
-                }
-                if (Test-Path $javaPath) {
-                    $env:PATH = "$javaPath;$env:PATH"
-                    Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
-                    break
-                }
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se Java ja esta instalado..." -ForegroundColor Yellow
-        $javaPath = Test-JavaInstalled
-        if ($javaPath) {
-            Write-Host "    [OK] Java ja esta instalado: $javaPath" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ao PATH
-            $javaDir = Split-Path $javaPath -Parent
-            $env:PATH = "$javaDir;$env:PATH"
-            Write-Host "    [OK] Java adicionado ao PATH: $javaDir" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Tentar Oracle JDK como alternativa
-        Write-Host "    Tentando Oracle JDK como alternativa..." -ForegroundColor Yellow
-        $result = Invoke-CommandSafe "winget install Oracle.JDK.17 --silent --accept-package-agreements --accept-source-agreements" "Instalando Java (Oracle) via winget"
-        if ($result) {
-            Write-Host "    Java instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar Java ao PATH da sessao atual
-            $javaPaths = @(
-                "C:\Program Files\Java\jdk-17\bin",
-                "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
-            )
-            
-            foreach ($javaPath in $javaPaths) {
-                if (Test-Path $javaPath) {
-                    $env:PATH = "$javaPath;$env:PATH"
-                    Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
-                    break
-                }
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou novamente, verificar se ja esta instalado
-        Write-Host "    Verificando se Java ja esta instalado..." -ForegroundColor Yellow
-        $javaPath = Test-JavaInstalled
-        if ($javaPath) {
-            Write-Host "    [OK] Java ja esta instalado: $javaPath" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ao PATH
-            $javaDir = Split-Path $javaPath -Parent
-            $env:PATH = "$javaDir;$env:PATH"
-            Write-Host "    [OK] Java adicionado ao PATH: $javaDir" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar Java..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Java" -Status "Baixando via chocolatey" -PercentComplete 20
-        $result = Invoke-CommandSafe "choco install temurin17 -y" "Instalando Java via chocolatey"
-        if ($result) {
-            Write-Host "    Java instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar Java ao PATH da sessao atual
-            $javaPaths = @(
-                "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin",
-                "C:\Program Files\Java\jdk-17\bin",
-                "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin"
-            )
-            
-            foreach ($javaPath in $javaPaths) {
-                $resolvedPath = Resolve-Path $javaPath -ErrorAction SilentlyContinue
-                if ($resolvedPath) {
-                    $env:PATH = "$resolvedPath;$env:PATH"
-                    Write-Host "    [OK] Java adicionado ao PATH: $resolvedPath" -ForegroundColor Green
-                    break
-                }
-                if (Test-Path $javaPath) {
-                    $env:PATH = "$javaPath;$env:PATH"
-                    Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
-                    break
-                }
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se Java ja esta instalado..." -ForegroundColor Yellow
-        $javaPath = Test-JavaInstalled
-        if ($javaPath) {
-            Write-Host "    [OK] Java ja esta instalado: $javaPath" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ao PATH
-            $javaDir = Split-Path $javaPath -Parent
-            $env:PATH = "$javaDir;$env:PATH"
-            Write-Host "    [OK] Java adicionado ao PATH: $javaDir" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO JAVA NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://adoptium.net/" -ForegroundColor Cyan
-    Write-Host "2. Baixe o Temurin JDK 17 para Windows" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Apos a instalacao, feche e reabra este terminal" -ForegroundColor Cyan
-    Write-Host "5. Execute este script novamente" -ForegroundColor Cyan
-    exit 1
 }
 
 function Test-AdbInstalled {
-    # Tentar Get-Command primeiro (mais confiável)
     $adbCmd = Get-Command adb -ErrorAction SilentlyContinue
     if ($adbCmd) {
-        $prevErrorAction = $ErrorActionPreference
-        $ErrorActionPreference = "SilentlyContinue"
         try {
             $result = & $adbCmd.Source version 2>&1
-            $ErrorActionPreference = $prevErrorAction
             if ($LASTEXITCODE -eq 0) {
-                Write-Host "    ADB encontrado via Get-Command: $($adbCmd.Source)" -ForegroundColor Green
+                Write-Result "ADB encontrado: $($adbCmd.Source)" "OK"
                 return $adbCmd.Source
             }
-        } catch {
-            $ErrorActionPreference = $prevErrorAction
-        }
+        } catch { }
     }
-    
-    # Tentar caminhos específicos
+
     $adbPaths = @(
         "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe",
         "C:\Android\Sdk\platform-tools\adb.exe",
-        "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+        "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools\adb.exe",
+        "C:\Program Files\Android\Android Studio\platform-tools\adb.exe"
     )
-    
+
     foreach ($path in $adbPaths) {
         if (Test-Path $path) {
             try {
-                $prevErrorAction = $ErrorActionPreference
-                $ErrorActionPreference = "SilentlyContinue"
                 $result = & $path version 2>&1
-                $ErrorActionPreference = $prevErrorAction
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "    ADB encontrado: $path" -ForegroundColor Green
+                    Write-Result "ADB encontrado: $path" "OK"
                     return $path
                 }
-            } catch {
-                $ErrorActionPreference = $prevErrorAction
-            }
+            } catch { }
         }
     }
     return $null
-}
-
-function Install-AndroidSdk {
-    Write-Host "`n[+] Instalando Android SDK automaticamente..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Android SDK" -Status "Preparando instalacao" -PercentComplete 0
-    
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar Android SDK..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Android SDK" -Status "Baixando via winget" -PercentComplete 20
-        $result = Invoke-CommandSafe "winget install Google.AndroidStudio --silent --accept-package-agreements --accept-source-agreements" "Instalando Android Studio via winget"
-        if ($result) {
-            Write-Host "    Android Studio instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    ADB esta incluido no Android Studio" -ForegroundColor Yellow
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ADB ao PATH da sessao atual
-            $adbPaths = @(
-                "$env:LOCALAPPDATA\Android\Sdk\platform-tools",
-                "C:\Android\Sdk\platform-tools",
-                "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools"
-            )
-            
-            foreach ($adbPath in $adbPaths) {
-                if (Test-Path $adbPath) {
-                    $env:PATH = "$adbPath;$env:PATH"
-                    Write-Host "    [OK] ADB adicionado ao PATH: $adbPath" -ForegroundColor Green
-                    break
-                }
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se ADB ja esta instalado..." -ForegroundColor Yellow
-        $adbPath = Test-AdbInstalled
-        if ($adbPath) {
-            Write-Host "    [OK] ADB ja esta instalado: $adbPath" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ao PATH
-            $adbDir = Split-Path $adbPath -Parent
-            $env:PATH = "$adbDir;$env:PATH"
-            Write-Host "    [OK] ADB adicionado ao PATH: $adbDir" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar Android SDK..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Android SDK" -Status "Baixando via chocolatey" -PercentComplete 20
-        $result = Invoke-CommandSafe "choco install android-sdk -y" "Instalando Android SDK via chocolatey"
-        if ($result) {
-            Write-Host "    Android SDK instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ADB ao PATH da sessao atual
-            $adbPaths = @(
-                "$env:LOCALAPPDATA\Android\Sdk\platform-tools",
-                "C:\Android\Sdk\platform-tools",
-                "C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools"
-            )
-            
-            foreach ($adbPath in $adbPaths) {
-                if (Test-Path $adbPath) {
-                    $env:PATH = "$adbPath;$env:PATH"
-                    Write-Host "    [OK] ADB adicionado ao PATH: $adbPath" -ForegroundColor Green
-                    break
-                }
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se ADB ja esta instalado..." -ForegroundColor Yellow
-        $adbPath = Test-AdbInstalled
-        if ($adbPath) {
-            Write-Host "    [OK] ADB ja esta instalado: $adbPath" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            
-            # Adicionar ao PATH
-            $adbDir = Split-Path $adbPath -Parent
-            $env:PATH = "$adbDir;$env:PATH"
-            Write-Host "    [OK] ADB adicionado ao PATH: $adbDir" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    # Verificar se Android Studio ja esta instalado via winget
-    $androidStudioInstalled = winget list | Select-String "AndroidStudio"
-    if ($androidStudioInstalled) {
-        Write-Host "    [AVISO] Android Studio ja esta instalado, mas ADB nao foi encontrado no PATH" -ForegroundColor Yellow
-        Write-Host "    [AVISO] Voce precisara configurar o ADB manualmente se necessario" -ForegroundColor Yellow
-        Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-        return $true
-    }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO ANDROID SDK NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://developer.android.com/studio" -ForegroundColor Cyan
-    Write-Host "2. Baixe o Android Studio para Windows" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Apos a instalacao, feche e reabra este terminal" -ForegroundColor Cyan
-    Write-Host "5. Execute este script novamente" -ForegroundColor Cyan
-    exit 1
 }
 
 function Test-NotepadPlusPlusInstalled {
     $nppPaths = @(
         "C:\Program Files\Notepad++\notepad++.exe",
         "C:\Program Files (x86)\Notepad++\notepad++.exe",
-        "$env:LOCALAPPDATA\Programs\Notepad++\notepad++.exe",
-        "notepad++"
+        "$env:LOCALAPPDATA\Programs\Notepad++\notepad++.exe"
     )
-    
+
     foreach ($path in $nppPaths) {
         if (Test-Path $path) {
-            Write-Host "    Notepad++ encontrado: $path" -ForegroundColor Green
+            Write-Result "Notepad++ encontrado" "OK"
             return $path
         }
     }
     return $null
-}
-
-function Install-NotepadPlusPlus {
-    Write-Host "`n[+] Instalando Notepad++ automaticamente..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Notepad++" -Status "Preparando instalacao" -PercentComplete 0
-    
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar Notepad++..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Notepad++" -Status "Baixando via winget" -PercentComplete 20
-        $result = Invoke-CommandSafe "winget install Notepad++.Notepad++ --silent --accept-package-agreements --accept-source-agreements" "Instalando Notepad++ via winget"
-        if ($result) {
-            Write-Host "    Notepad++ instalado com sucesso via winget!" -ForegroundColor Green
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se Notepad++ ja esta instalado..." -ForegroundColor Yellow
-        $nppPath = Test-NotepadPlusPlusInstalled
-        if ($nppPath) {
-            Write-Host "    [OK] Notepad++ ja esta instalado: $nppPath" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar Notepad++..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Notepad++" -Status "Baixando via chocolatey" -PercentComplete 20
-        $result = Invoke-CommandSafe "choco install notepadplusplus -y" "Instalando Notepad++ via chocolatey"
-        if ($result) {
-            Write-Host "    Notepad++ instalado com sucesso via chocolatey!" -ForegroundColor Green
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se Notepad++ ja esta instalado..." -ForegroundColor Yellow
-        $nppPath = Test-NotepadPlusPlusInstalled
-        if ($nppPath) {
-            Write-Host "    [OK] Notepad++ ja esta instalado: $nppPath" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO NOTEPAD++ NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://notepad-plus-plus.org/downloads/" -ForegroundColor Cyan
-    Write-Host "2. Baixe o instalador para Windows" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Apos a instalacao, execute este script novamente" -ForegroundColor Cyan
-    exit 1
 }
 
 function Test-RustDeskInstalled {
     $rustdeskPaths = @(
         "C:\Program Files\RustDesk\rustdesk.exe",
         "C:\Program Files (x86)\RustDesk\rustdesk.exe",
-        "$env:LOCALAPPDATA\Programs\RustDesk\rustdesk.exe",
-        "rustdesk"
+        "$env:LOCALAPPDATA\Programs\RustDesk\rustdesk.exe"
     )
-    
+
     foreach ($path in $rustdeskPaths) {
         if (Test-Path $path) {
-            Write-Host "    RustDesk encontrado: $path" -ForegroundColor Green
+            Write-Result "RustDesk encontrado" "OK"
             return $path
         }
     }
     return $null
 }
 
-function Install-RustDesk {
-    Write-Host "`n[+] Instalando RustDesk automaticamente..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando RustDesk" -Status "Preparando instalacao" -PercentComplete 0
-    
+function Test-OllamaInstalled {
+    $result = Invoke-Safe { ollama -v } "Verificar Ollama"
+    return $result.Success
+}
+
+function Test-OpencodeInstalled {
+    $result = Invoke-Safe { opencode --version } "Verificar OpenCode"
+    return $result.Success
+}
+
+function Test-NpxInstalled {
+    $result = Invoke-Safe { npx -v } "Verificar npx"
+    return $result.Success
+}
+
+# ============================= FUNCOES DE INSTALACAO =============================
+
+function Install-Python {
+    Write-Host "`n  [+] Instalando Python $pythonVersion..." -ForegroundColor Yellow
+
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar RustDesk..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando RustDesk" -Status "Baixando via winget" -PercentComplete 20
-        $result = Invoke-CommandSafe "winget install RustDesk.RustDesk --silent --accept-package-agreements --accept-source-agreements" "Instalando RustDesk via winget"
-        if ($result) {
-            Write-Host "    RustDesk instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Configurando senha padrao 2772..." -ForegroundColor Yellow
-            
-            # Criar arquivo de configuracao do RustDesk com senha
-            $rustdeskConfigDir = Join-Path $env:APPDATA "RustDesk"
-            $rustdeskConfigFile = Join-Path $rustdeskConfigDir "config.toml"
-            
-            try {
-                New-Item -ItemType Directory -Force -Path $rustdeskConfigDir | Out-Null
-                $configContent = @"
-password = '2772'
-"@
-                Set-Content -Path $rustdeskConfigFile -Value $configContent -Encoding UTF8
-                Write-Host "    [OK] Senha 2772 configurada para RustDesk!" -ForegroundColor Green
-            } catch {
-                Write-Host "    [AVISO] Nao foi possivel configurar senha automaticamente: $($_.Exception.Message)" -ForegroundColor Yellow
-                Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
-            }
-            
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se RustDesk ja esta instalado..." -ForegroundColor Yellow
-        $rustdeskPath = Test-RustDeskInstalled
-        if ($rustdeskPath) {
-            Write-Host "    [OK] RustDesk ja esta instalado: $rustdeskPath" -ForegroundColor Green
-            Write-Host "    Configurando senha padrao 2772..." -ForegroundColor Yellow
-            
-            # Criar arquivo de configuracao do RustDesk com senha
-            $rustdeskConfigDir = Join-Path $env:APPDATA "RustDesk"
-            $rustdeskConfigFile = Join-Path $rustdeskConfigDir "config.toml"
-            
-            try {
-                New-Item -ItemType Directory -Force -Path $rustdeskConfigDir | Out-Null
-                $configContent = @"
-password = '2772'
-"@
-                Set-Content -Path $rustdeskConfigFile -Value $configContent -Encoding UTF8
-                Write-Host "    [OK] Senha 2772 configurada para RustDesk!" -ForegroundColor Green
-            } catch {
-                Write-Host "    [AVISO] Nao foi possivel configurar senha automaticamente: $($_.Exception.Message)" -ForegroundColor Yellow
-                Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
+        Write-Host "    Tentando winget..." -ForegroundColor Yellow
+        $result = Invoke-Safe { winget install Python.Python.3.8 --silent --accept-package-agreements --accept-source-agreements } "Instalar Python via winget"
+        if ($result.Success) {
+            Write-Result "Python instalado. Reabra o terminal e execute o script novamente." "OK"
+            exit 1
         }
     }
-    
+
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar RustDesk..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando RustDesk" -Status "Baixando via chocolatey" -PercentComplete 20
-        $result = Invoke-CommandSafe "choco install rustdesk -y" "Instalando RustDesk via chocolatey"
-        if ($result) {
-            Write-Host "    RustDesk instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se RustDesk ja esta instalado..." -ForegroundColor Yellow
-        $rustdeskPath = Test-RustDeskInstalled
-        if ($rustdeskPath) {
-            Write-Host "    [OK] RustDesk ja esta instalado: $rustdeskPath" -ForegroundColor Green
-            Write-Host "    Configurando senha padrao 2772..." -ForegroundColor Yellow
-            
-            # Criar arquivo de configuracao do RustDesk com senha
-            $rustdeskConfigDir = Join-Path $env:APPDATA "RustDesk"
-            $rustdeskConfigFile = Join-Path $rustdeskConfigDir "config.toml"
-            
-            try {
-                New-Item -ItemType Directory -Force -Path $rustdeskConfigDir | Out-Null
-                $configContent = @"
-password = '2772'
-"@
-                Set-Content -Path $rustdeskConfigFile -Value $configContent -Encoding UTF8
-                Write-Host "    [OK] Senha 2772 configurada para RustDesk!" -ForegroundColor Green
-            } catch {
-                Write-Host "    [AVISO] Nao foi possivel configurar senha automaticamente: $($_.Exception.Message)" -ForegroundColor Yellow
-                Write-Host "    Configure a senha 2772 manualmente no RustDesk" -ForegroundColor Yellow
-            }
-            
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
+        Write-Host "    Tentando chocolatey..." -ForegroundColor Yellow
+        $result = Invoke-Safe { choco install python3.8 -y } "Instalar Python via chocolatey"
+        if ($result.Success) {
+            Write-Result "Python instalado. Reabra o terminal e execute o script novamente." "OK"
+            exit 1
         }
     }
-    
-    # RustDesk nao e essencial para o funcionamento, continuar mesmo se nao for encontrado
-    Write-Host "    [AVISO] RustDesk nao foi encontrado, mas nao e essencial para o funcionamento" -ForegroundColor Yellow
-    Write-Host "    [AVISO] Voce pode instalar RustDesk manualmente depois se necessario" -ForegroundColor Yellow
-    Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-    return $true
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO RUSTDESK NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://rustdesk.com/" -ForegroundColor Cyan
-    Write-Host "2. Baixe o instalador para Windows" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Configure a senha 2772 no RustDesk" -ForegroundColor Cyan
-    Write-Host "5. Apos a instalacao, execute este script novamente" -ForegroundColor Cyan
+
+    Write-Host "    Baixando instalador do Python..." -ForegroundColor Yellow
+    $installerPath = Join-Path $scriptDir "python-installer.exe"
+
+    try {
+        Invoke-WebRequest -Uri $pythonInstallerUrl -OutFile $installerPath -UseBasicParsing
+        Write-Result "Download concluido" "OK"
+
+        Write-Host "    Instalando Python (isso pode levar alguns minutos)..." -ForegroundColor Yellow
+        $process = Start-Process -FilePath $installerPath -ArgumentList "/quiet", "InstallAllUsers=1", "PrependPath=1", "Include_test=0" -Wait -PassThru
+
+        if ($process.ExitCode -eq 0) {
+            Write-Result "Python instalado com sucesso!" "OK"
+            Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+            Write-Result "Reabra o terminal e execute o script novamente." "AVISO"
+            exit 1
+        } else {
+            Write-Result "Falha na instalacao. Codigo: $($process.ExitCode)" "ERRO"
+        }
+    } catch {
+        Write-Result "Erro ao baixar/instalar Python: $($_.Exception.Message)" "ERRO"
+    }
+
+    Write-Banner "INSTALACAO MANUAL DO PYTHON NECESSARIA" "Red"
+    Write-Host "  Acesse: https://www.python.org/downloads/release/python-3810/" -ForegroundColor Cyan
+    Write-Host "  Baixe 'Windows installer (64-bit)' e instale marcando 'Add Python to PATH'" -ForegroundColor Cyan
     exit 1
 }
 
-function Install-Ollama {
-    Write-Host "`n[+] Instalando Ollama automaticamente..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Ollama" -Status "Preparando instalacao" -PercentComplete 0
-    
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar Ollama..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Ollama" -Status "Baixando via winget" -PercentComplete 20
-        $result = Invoke-CommandSafe "winget install Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements" "Instalando Ollama via winget"
-        if ($result) {
-            Write-Host "    Ollama instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se Ollama ja esta instalado..." -ForegroundColor Yellow
-        if (Test-OllamaInstalled) {
-            Write-Host "    [OK] Ollama ja esta instalado" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-            Write-Host "    [OK] Ollama adicionado ao PATH" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar Ollama..." -ForegroundColor Yellow
-        Write-Progress -Activity "Instalando Ollama" -Status "Baixando via chocolatey" -PercentComplete 20
-        $result = Invoke-CommandSafe "choco install ollama -y" "Instalando Ollama via chocolatey"
-        if ($result) {
-            Write-Host "    Ollama instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            $env:PATH += ";C:\ProgramData\chocolatey\bin"
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-        
-        # Se falhou, verificar se ja esta instalado
-        Write-Host "    Verificando se Ollama ja esta instalado..." -ForegroundColor Yellow
-        if (Test-OllamaInstalled) {
-            Write-Host "    [OK] Ollama ja esta instalado" -ForegroundColor Green
-            Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-            Write-Host "    [OK] Ollama adicionado ao PATH" -ForegroundColor Green
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        }
-    }
-    
-    Write-Host "    Baixando instalador do Ollama..." -ForegroundColor Yellow
-    Write-Progress -Activity "Instalando Ollama" -Status "Baixando instalador" -PercentComplete 10
-    $installerUrl = "https://ollama.com/download/OllamaSetup.exe"
-    $installerPath = Join-Path $scriptDir "ollama-installer.exe"
-    
-    try {
-        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
-        Write-Host "    [OK] Download concluido!" -ForegroundColor Green
-        Write-Progress -Activity "Instalando Ollama" -Status "Instalando" -PercentComplete 50
-        
-        Write-Host "    Instalando Ollama..." -ForegroundColor Yellow
-        $process = Start-Process -FilePath $installerPath -ArgumentList "/silent" -Wait -PassThru
-        
-        if ($process.ExitCode -eq 0) {
-            Write-Host "    [OK] Ollama instalado com sucesso!" -ForegroundColor Green
-            Remove-Item $installerPath -Force
-            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
-            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
-            return $true
-        } else {
-            Write-Host "    [ERRO] Falha na instalacao do Ollama. Codigo: $($process.ExitCode)" -ForegroundColor Red
-        }
-    } catch {
-        Write-Host "    [ERRO] Erro ao baixar/instalar Ollama: $($_.Exception.Message)" -ForegroundColor Red
-    }
-    
-    # Se falhou tudo, verificar se ja esta instalado
-    Write-Host "    Verificando se Ollama ja esta instalado..." -ForegroundColor Yellow
-    if (Test-OllamaInstalled) {
-        Write-Host "    [OK] Ollama ja esta instalado" -ForegroundColor Green
-        Write-Host "    Adicionando ao PATH da sessao atual..." -ForegroundColor Yellow
-        $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
-        Write-Host "    [OK] Ollama adicionado ao PATH" -ForegroundColor Green
-        Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+function Install-NodeJs {
+    Write-Host "`n  [+] Instalando Node.js..." -ForegroundColor Yellow
+
+    $result = Invoke-Safe { node -v } "Verificar se Node.js ja existe"
+    if ($result.Success) {
+        Write-Result "Node.js ja instalado" "OK"
         return $true
     }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO OLLAMA NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://ollama.com/download" -ForegroundColor Cyan
-    Write-Host "2. Baixe o instalador para Windows" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Apos a instalacao, feche e reabra este terminal" -ForegroundColor Cyan
-    Write-Host "5. Execute este script novamente" -ForegroundColor Cyan
+
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetAvailable) {
+        $result = Invoke-Safe { winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements } "Instalar Node.js via winget"
+        if ($result.Success) {
+            Write-Result "Node.js instalado. Reabra o terminal e execute novamente." "OK"
+            exit 1
+        }
+    }
+
+    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
+    if ($chocoAvailable) {
+        $result = Invoke-Safe { choco install nodejs-lts -y } "Instalar Node.js via chocolatey"
+        if ($result.Success) {
+            Write-Result "Node.js instalado. Reabra o terminal e execute novamente." "OK"
+            exit 1
+        }
+    }
+
+    Write-Banner "INSTALACAO MANUAL DO NODE.JS NECESSARIA" "Red"
+    Write-Host "  Acesse: https://nodejs.org/ (baixe a versao LTS)" -ForegroundColor Cyan
+    exit 1
+}
+
+function Install-Java {
+    Write-Host "`n  [+] Instalando Java..." -ForegroundColor Yellow
+
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetAvailable) {
+        Write-Host "    Tentando winget..." -ForegroundColor Yellow
+        $result = Invoke-Safe { winget install EclipseAdoptium.Temurin.17.JDK --silent --accept-package-agreements --accept-source-agreements } "Instalar Java via winget"
+        if ($result.Success) {
+            Write-Result "Java instalado via winget" "OK"
+            $null = Add-JavaToPath
+            return $true
+        }
+
+        $javaPath = Test-JavaInstalled
+        if ($javaPath) {
+            Write-Result "Java ja instalado" "OK"
+            $null = Add-JavaToPath
+            return $true
+        }
+    }
+
+    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
+    if ($chocoAvailable) {
+        Write-Host "    Tentando chocolatey..." -ForegroundColor Yellow
+        $result = Invoke-Safe { choco install temurin17 -y } "Instalar Java via chocolatey"
+        if ($result.Success) {
+            Write-Result "Java instalado via chocolatey" "OK"
+            $null = Add-JavaToPath
+            return $true
+        }
+
+        $javaPath = Test-JavaInstalled
+        if ($javaPath) {
+            Write-Result "Java ja instalado" "OK"
+            $null = Add-JavaToPath
+            return $true
+        }
+    }
+
+    Write-Banner "INSTALACAO MANUAL DO JAVA NECESSARIA" "Red"
+    Write-Host "  Acesse: https://adoptium.net/ (Temurin JDK 17 para Windows)" -ForegroundColor Cyan
+    exit 1
+}
+
+function Add-JavaToPath {
+    $javaPaths = @(
+        "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin",
+        "C:\Program Files\Java\jdk-17\bin",
+        "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin",
+        "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
+    )
+
+    foreach ($javaPath in $javaPaths) {
+        $resolvedPath = Resolve-Path $javaPath -ErrorAction SilentlyContinue
+        if ($resolvedPath) {
+            $env:PATH = "$resolvedPath;$env:PATH"
+            Write-Result "Java adicionado ao PATH: $resolvedPath" "OK"
+            return $true
+        }
+        if (Test-Path $javaPath) {
+            $env:PATH = "$javaPath;$env:PATH"
+            Write-Result "Java adicionado ao PATH: $javaPath" "OK"
+            return $true
+        }
+    }
+
+    $javaCmd = Get-Command java -ErrorAction SilentlyContinue
+    if ($javaCmd) {
+        $javaDir = Split-Path $javaCmd.Source -Parent
+        $env:PATH = "$javaDir;$env:PATH"
+        Write-Result "Java adicionado ao PATH: $javaDir" "OK"
+        return $true
+    }
+
+    Write-Result "Nao foi possivel adicionar Java ao PATH" "AVISO"
+    return $false
+}
+
+function Install-AndroidSdk {
+    Write-Host "`n  [+] Configurando Android SDK..." -ForegroundColor Yellow
+
+    $adbPath = Test-AdbInstalled
+    if ($adbPath) {
+        Write-Result "ADB ja disponivel" "OK"
+        $adbDir = Split-Path $adbPath -Parent
+        $env:PATH = "$adbDir;$env:PATH"
+        Write-Result "ADB adicionado ao PATH" "OK"
+        return $true
+    }
+
+    $studioDirs = @(
+        "C:\Program Files\Android\Android Studio",
+        "$env:LOCALAPPDATA\Google\AndroidStudio*"
+    )
+
+    foreach ($dir in $studioDirs) {
+        $resolved = Resolve-Path $dir -ErrorAction SilentlyContinue
+        if ($resolved) {
+            Write-Result "Android Studio encontrado em $resolved" "AVISO"
+            Write-Result "ADB nao encontrado. Instale o SDK platform-tools pelo SDK Manager do Android Studio." "AVISO"
+            return $true
+        }
+    }
+
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetAvailable) {
+        Write-Host "    Instalando Android Studio via winget..." -ForegroundColor Yellow
+        $result = Invoke-Safe { winget install Google.AndroidStudio --silent --accept-package-agreements --accept-source-agreements } "Instalar Android Studio"
+        if ($result.Success) {
+            Write-Result "Android Studio instalado. ADB requer configuracao manual pelo SDK Manager." "AVISO"
+            return $true
+        }
+    }
+
+    Write-Banner "CONFIGURACAO MANUAL DO ADB" "Red"
+    Write-Host "  Instale o Android Studio e configure o SDK platform-tools pelo SDK Manager." -ForegroundColor Cyan
+    exit 1
+}
+
+function Install-NotepadPlusPlus {
+    Write-Host "`n  [+] Instalando Notepad++..." -ForegroundColor Yellow
+
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetAvailable) {
+        $result = Invoke-Safe { winget install Notepad++.Notepad++ --silent --accept-package-agreements --accept-source-agreements } "Instalar Notepad++ via winget"
+        if ($result.Success) {
+            Write-Result "Notepad++ instalado" "OK"
+            return $true
+        }
+    }
+
+    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
+    if ($chocoAvailable) {
+        $result = Invoke-Safe { choco install notepadplusplus -y } "Instalar Notepad++ via chocolatey"
+        if ($result.Success) {
+            Write-Result "Notepad++ instalado" "OK"
+            return $true
+        }
+    }
+
+    Write-Result "Notepad++ nao instalado (opcional, continuando)" "AVISO"
+    return $true
+}
+
+function Install-RustDesk {
+    Write-Host "`n  [+] Verificando RustDesk..." -ForegroundColor Yellow
+    Write-Result "RustDesk e opcional. Pule esta instalacao ou instale manualmente depois." "AVISO"
+    return $true
+}
+
+function Install-Ollama {
+    Write-Host "`n  [+] Instalando Ollama..." -ForegroundColor Yellow
+
+    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
+    if ($wingetAvailable) {
+        $result = Invoke-Safe { winget install Ollama.Ollama --silent --accept-package-agreements --accept-source-agreements } "Instalar Ollama via winget"
+        if ($result.Success) {
+            Write-Result "Ollama instalado" "OK"
+            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
+            return $true
+        }
+    }
+
+    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
+    if ($chocoAvailable) {
+        $result = Invoke-Safe { choco install ollama -y } "Instalar Ollama via chocolatey"
+        if ($result.Success) {
+            Write-Result "Ollama instalado" "OK"
+            $env:PATH += "C:\ProgramData\chocolatey\bin"
+            return $true
+        }
+    }
+
+    Write-Host "    Baixando instalador do Ollama..." -ForegroundColor Yellow
+    $installerUrl = "https://ollama.com/download/OllamaSetup.exe"
+    $installerPath = Join-Path $scriptDir "ollama-installer.exe"
+
+    try {
+        Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+        Write-Result "Download concluido" "OK"
+
+        Write-Host "    Instalando Ollama..." -ForegroundColor Yellow
+        $process = Start-Process -FilePath $installerPath -ArgumentList "/silent" -Wait -PassThru
+
+        if ($process.ExitCode -eq 0) {
+            Write-Result "Ollama instalado com sucesso!" "OK"
+            Remove-Item $installerPath -Force -ErrorAction SilentlyContinue
+            $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
+            return $true
+        } else {
+            Write-Result "Falha na instalacao. Codigo: $($process.ExitCode)" "ERRO"
+        }
+    } catch {
+        Write-Result "Erro ao baixar/instalar Ollama: $($_.Exception.Message)" "ERRO"
+    }
+
+    if (Test-OllamaInstalled) {
+        Write-Result "Ollama ja instalado" "OK"
+        $env:PATH += ";$env:LOCALAPPDATA\Programs\Ollama"
+        return $true
+    }
+
+    Write-Banner "INSTALACAO MANUAL DO OLLAMA NECESSARIA" "Red"
+    Write-Host "  Acesse: https://ollama.com/download" -ForegroundColor Cyan
     exit 1
 }
 
 function Install-OllamaModel {
-    $modelName = "antigravity-sonnet"
-    Write-Host "`n[+] Configurando modelo Ollama: $modelName" -ForegroundColor Yellow
-    
-    $result = Invoke-CommandSafe "ollama pull $modelName" "Baixando modelo $modelName"
-    if ($result) {
-        Write-Host "    [OK] Modelo $modelName configurado com sucesso!" -ForegroundColor Green
-        return $true
-    } else {
-        Write-Host "    [AVISO] Erro ao baixar modelo, mas continuando..." -ForegroundColor Yellow
+    param([string]$ModelName = "llama3")
+    Write-Host "`n  [+] Baixando modelo Ollama: $ModelName" -ForegroundColor Yellow
+    Write-Host "    Isso pode levar varios minutos dependendo da sua internet..." -ForegroundColor Yellow
+
+    # Usar Start-Process para evitar problemas com ANSI escape codes
+    try {
+        $process = Start-Process -FilePath "ollama" -ArgumentList "pull", $ModelName -NoNewWindow -Wait -PassThru
+        if ($process.ExitCode -eq 0) {
+            Write-Result "Modelo $ModelName baixado com sucesso!" "OK"
+            return $true
+        } else {
+            Write-Result "Falha ao baixar modelo. Codigo: $($process.ExitCode)" "ERRO"
+            return $false
+        }
+    } catch {
+        Write-Result "Erro ao baixar modelo: $($_.Exception.Message)" "ERRO"
         return $false
     }
 }
 
+function Install-Opencode {
+    Write-Host "`n  [+] Instalando OpenCode via npm..." -ForegroundColor Yellow
+    $result = Invoke-Safe { npm i -g opencode-ai@latest } "Instalar OpenCode"
+    if ($result.Success) {
+        Write-Result "OpenCode instalado com sucesso!" "OK"
+        return $true
+    }
+
+    Write-Banner "INSTALACAO MANUAL DO OPENCODE NECESSARIA" "Red"
+    Write-Host "  Execute: npm i -g opencode-ai@latest" -ForegroundColor Cyan
+    exit 1
+}
+
+function Install-PythonDependencies {
+    param([string]$pythonPath)
+
+    $requirementsFile = Join-Path $scriptDir "requirements.txt"
+
+    if (-not (Test-Path $requirementsFile)) {
+        Write-Result "Arquivo requirements.txt nao encontrado em $requirementsFile" "ERRO"
+        return $false
+    }
+
+    Write-Host "`n  [+] Instalando dependencias Python..." -ForegroundColor Yellow
+    $result = Invoke-Safe { & $pythonPath -m pip install -r $requirementsFile } "Instalar dependencias Python"
+    return $result.Success
+}
+
 function Set-OllamaKnowledgeBase {
-    Write-Host "`n[+] Configurando base de conhecimento para Ollama..." -ForegroundColor Yellow
-    
+    Write-Host "`n  [+] Configurando base de conhecimento Ollama..." -ForegroundColor Yellow
+
     $knowledgeBaseDir = Join-Path $scriptDir "knowledge_base"
     $rulesFile = Join-Path $knowledgeBaseDir "layout_rules.txt"
     $schedulerScript = Join-Path $scriptDir "update_knowledge.ps1"
-    
+
     try {
         New-Item -ItemType Directory -Force -Path $knowledgeBaseDir | Out-Null
-        Write-Host "    [OK] Diretorio de conhecimento criado: $knowledgeBaseDir" -ForegroundColor Green
+        Write-Result "Diretorio criado: $knowledgeBaseDir" "OK"
     } catch {
-        Write-Host "    [ERRO] Erro ao criar diretorio de conhecimento: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Result "Erro ao criar diretorio: $($_.Exception.Message)" "ERRO"
         return $false
     }
-    
-    # Baixar documento do Google Docs
+
     $docUrl = "https://docs.google.com/document/d/1sTsRoAEWrU-1ltOMmUWyQ-18DFTmYl0R5UZc-QnNtCs/export?format=txt"
     try {
         Invoke-WebRequest -Uri $docUrl -OutFile $rulesFile -UseBasicParsing
-        Write-Host "    [OK] Documento de regras baixado: $rulesFile" -ForegroundColor Green
+        Write-Result "Documento de regras baixado" "OK"
     } catch {
-        Write-Host "    [ERRO] Erro ao baixar documento: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "    [AVISO] Criando arquivo de regras vazio..." -ForegroundColor Yellow
+        Write-Result "Erro ao baixar documento: $($_.Exception.Message)" "ERRO"
         Set-Content -Path $rulesFile -Value "# Regras de layout, postagem e paginas" -Encoding UTF8
     }
-    
-    # Criar script de atualizacao diaria
+
     $schedulerContent = @'
-# Script de atualizacao diaria da base de conhecimento do Ollama
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $knowledgeBaseDir = Join-Path $scriptDir "knowledge_base"
 $rulesFile = Join-Path $knowledgeBaseDir "layout_rules.txt"
@@ -989,463 +643,382 @@ Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Atualizando base de conh
 
 try {
     Invoke-WebRequest -Uri $docUrl -OutFile $rulesFile -UseBasicParsing
-    Write-Host "    [OK] Base de conhecimento atualizada com sucesso!" -ForegroundColor Green
+    Write-Host "    [OK] Base de conhecimento atualizada!" -ForegroundColor Green
 } catch {
-    Write-Host "    [ERRO] Erro ao atualizar base de conhecimento: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    [ERRO] Erro na atualizacao: $($_.Exception.Message)" -ForegroundColor Red
 }
-
-# Criar/modificar tarefa agendada para execucao diaria
-$action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-$trigger = New-ScheduledTaskTrigger -Daily -At "9:00 AM"
-Register-ScheduledTask -TaskName "OllamaKnowledgeUpdate" -Action $action -Trigger $trigger -Description "Atualiza base de conhecimento do Ollama diariamente" -Force | Out-Null
-Write-Host "    [OK] Tarefa agendada criada para atualizacao diaria as 9:00 AM" -ForegroundColor Green
 '@
-    
+
     try {
         Set-Content -Path $schedulerScript -Value $schedulerContent -Encoding UTF8
-        Write-Host "    [OK] Script de atualizacao criado: $schedulerScript" -ForegroundColor Green
-        
-        # Executar script de atualizacao inicial
-        & powershell -ExecutionPolicy Bypass -File $schedulerScript
-        Write-Host "    [OK] Atualizacao inicial executada!" -ForegroundColor Green
-        return $true
+        Write-Result "Script de atualizacao criado" "OK"
     } catch {
-        Write-Host "    [ERRO] Erro ao criar/executar script de atualizacao: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
+        Write-Result "Erro ao criar script: $($_.Exception.Message)" "ERRO"
     }
-}
 
-function Install-NodeJs {
-    Write-Host "`n[+] Instalando Node.js automaticamente..." -ForegroundColor Yellow
-    
-    $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
-    if ($wingetAvailable) {
-        Write-Host "    Usando winget para instalar Node.js..." -ForegroundColor Yellow
-        $result = Invoke-CommandSafe "winget install OpenJS.NodeJS.LTS --silent --accept-package-agreements --accept-source-agreements" "Instalando Node.js via winget"
-        if ($result) {
-            Write-Host "    Node.js instalado com sucesso via winget!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
-        }
-    }
-    
-    $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
-    if ($chocoAvailable) {
-        Write-Host "    Usando chocolatey para instalar Node.js..." -ForegroundColor Yellow
-        $result = Invoke-CommandSafe "choco install nodejs-lts -y" "Instalando Node.js via chocolatey"
-        if ($result) {
-            Write-Host "    Node.js instalado com sucesso via chocolatey!" -ForegroundColor Green
-            Write-Host "    Por favor, feche e reabra este terminal para atualizar o PATH." -ForegroundColor Yellow
-            Write-Host "    Execute este script novamente apos reabrir o terminal." -ForegroundColor Yellow
-            exit 1
-        }
-    }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Red
-    Write-Host "INSTALACAO MANUAL DO NODE.JS NECESSARIA" -ForegroundColor Red
-    Write-Host "$('='*60)" -ForegroundColor Red
-    Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://nodejs.org/" -ForegroundColor Cyan
-    Write-Host "2. Baixe a versao LTS para Windows" -ForegroundColor Cyan
-    Write-Host "3. Execute o instalador" -ForegroundColor Cyan
-    Write-Host "4. Marque 'Add to PATH'" -ForegroundColor Cyan
-    Write-Host "5. Apos a instalacao, feche e reabra este terminal" -ForegroundColor Cyan
-    Write-Host "6. Execute este script novamente" -ForegroundColor Cyan
-    exit 1
+    return $true
 }
 
 function Request-OpenRouterToken {
-    Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "CONFIGURACAO DO OPENROUTER" -ForegroundColor Cyan
-    Write-Host "$('='*60)" -ForegroundColor Cyan
-    
+    Write-Banner "CONFIGURACAO DO OPENROUTER" "Cyan"
+
     $token = $null
-    
-    # Tenta usar GitHub CLI para ler o secret
+
     $ghAvailable = Get-Command gh -ErrorAction SilentlyContinue
     if ($ghAvailable) {
-        Write-Host "    GitHub CLI encontrado, tentando ler secret OPENROUTER_TOKEN..." -ForegroundColor Yellow
+        Write-Host "    Verificando GitHub CLI..." -ForegroundColor Yellow
         try {
             $secretValue = gh secret view OPENROUTER_TOKEN --repo canalqb/mcpopenrouter 2>&1
             if ($LASTEXITCODE -eq 0) {
                 $token = $secretValue
-                Write-Host "    [OK] Secret lido do GitHub!" -ForegroundColor Green
+                Write-Result "Token lido do GitHub Secrets" "OK"
             }
         } catch {
-            Write-Host "    [AVISO] Nao foi possivel ler o secret via GitHub CLI: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Result "Nao foi possivel ler secret do GitHub" "AVISO"
         }
     }
-    
-    # Se nao conseguiu ler o secret, solicita manualmente
+
     if (-not $token) {
-        $token = Read-Host "Digite seu token do OpenRouter (ou pressione Enter para usar o existente)"
+        $token = Read-Host "  Digite seu token do OpenRouter (ou Enter para pular)"
     }
-    
+
     if ($token -ne "") {
-        Write-Host "    Token fornecido, atualizando arquivo .env..." -ForegroundColor Yellow
         try {
             Set-Content -Path $envFile -Value "OPENAI_API_KEY=$token" -Encoding UTF8
-            Write-Host "    [OK] Token salvo em $envFile" -ForegroundColor Green
+            Write-Result "Token salvo em $envFile" "OK"
         } catch {
-            Write-Host "    [ERRO] Erro ao salvar token: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Result "Erro ao salvar token: $($_.Exception.Message)" "ERRO"
         }
     } else {
         if (Test-Path $envFile) {
-            Write-Host "    Usando token existente do arquivo .env" -ForegroundColor Yellow
+            Write-Result "Usando token existente do arquivo .env" "AVISO"
         } else {
-            Write-Host "    [AVISO] Nenhum token fornecido e arquivo .env nao existe" -ForegroundColor Yellow
-            Write-Host "    Voce precisara configurar o token manualmente depois" -ForegroundColor Yellow
+            Write-Result "Nenhum token configurado. Configure manualmente em $envFile" "AVISO"
         }
-    }
-}
-
-function Install-PythonDependencies {
-    $requirementsFile = Join-Path $scriptDir "requirements.txt"
-    
-    # Se requirements.txt nao existe no Desktop, tentar copiar do repositório
-    if (-not (Test-Path $requirementsFile)) {
-        $repoRequirementsFile = "C:\Users\Qb\Desktop\mcp\requirements.txt"
-        if (Test-Path $repoRequirementsFile) {
-            Write-Host "    Copiando requirements.txt do repositório..." -ForegroundColor Yellow
-            Copy-Item $repoRequirementsFile $requirementsFile
-        } else {
-            Write-Host "    [ERRO] Arquivo requirements.txt nao encontrado" -ForegroundColor Red
-            return $false
-        }
-    }
-    
-    return Invoke-CommandSafe "& `"$pythonPath`" -m pip install -r `"$requirementsFile`"" "Instalando dependencias Python"
-}
-
-function New-DevinConfigDir {
-    try {
-        New-Item -ItemType Directory -Force -Path $devinConfigDir | Out-Null
-        Write-Host "    [OK] Diretorio criado: $devinConfigDir" -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "    [ERRO] Erro ao criar diretorio: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
     }
 }
 
 function New-McpConfig {
+    param([string]$ConfigDir, [string]$Label = "Windsurf")
+
+    $configFile = Join-Path $ConfigDir "mcp_config.json"
+
+    try {
+        New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+    } catch {
+        Write-Result "Erro ao criar diretorio $ConfigDir" "ERRO"
+        return $false
+    }
+
     $config = @{
         mcpServers = @{
             filesystem = @{
                 command = "npx"
-                args = @(
-                    "-y"
-                    "@modelcontextprotocol/server-filesystem"
-                    $scriptDir
-                )
+                args = @("-y", "@modelcontextprotocol/server-filesystem", $scriptDir)
             }
         }
     }
-    
-    try {
-        $configJson = $config | ConvertTo-Json -Depth 10
-        Set-Content -Path $mcpConfigFile -Value $configJson -Encoding UTF8
-        Write-Host "    [OK] Configuracao MCP criada: $mcpConfigFile" -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "    [ERRO] Erro ao criar configuracao: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
-    }
-}
 
-function New-DevinMcpConfig {
-    $devinConfigDir = Join-Path $env:APPDATA "Devin"
-    $devinMcpConfigFile = Join-Path $devinConfigDir "mcp_config.json"
-    
-    try {
-        New-Item -ItemType Directory -Force -Path $devinConfigDir | Out-Null
-        Write-Host "    [OK] Diretorio Devin criado: $devinConfigDir" -ForegroundColor Green
-    } catch {
-        Write-Host "    [ERRO] Erro ao criar diretorio Devin: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
-    }
-    
-    $config = @{
-        mcpServers = @{
-            openrouter = @{
-                command = "npx"
-                args = @(
-                    "-y"
-                    "@modelcontextprotocol/server-openrouter"
-                    "--model"
-                    "ollama/antigravity-sonnet"
-                )
-                env = @{
-                    OPENROUTER_API_KEY = (Get-Content $envFile -ErrorAction SilentlyContinue | Select-String "OPENAI_API_KEY" | ForEach-Object { $_.ToString().Split("=")[1] })
-                }
-            }
-        }
-    }
-    
     try {
         $configJson = $config | ConvertTo-Json -Depth 10
-        Set-Content -Path $devinMcpConfigFile -Value $configJson -Encoding UTF8
-        Write-Host "    [OK] Configuracao MCP Devin criada: $devinMcpConfigFile" -ForegroundColor Green
+        Set-Content -Path $configFile -Value $configJson -Encoding UTF8
+        Write-Result "Configuracao MCP criada: $configFile" "OK"
         return $true
     } catch {
-        Write-Host "    [ERRO] Erro ao criar configuracao Devin: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Result "Erro ao criar configuracao: $($_.Exception.Message)" "ERRO"
         return $false
     }
 }
 
 function Test-NpxFilesystem {
-    $testCommand = "npx -y @modelcontextprotocol/server-filesystem `"$scriptDir`""
-    Write-Host "`n[+] Testando servidor MCP filesystem..." -ForegroundColor Yellow
-    Write-Host "    Isso pode levar alguns segundos na primeira vez..." -ForegroundColor Yellow
-    
+    Write-Host "`n  [+] Testando servidor MCP filesystem..." -ForegroundColor Yellow
+    Write-Host "    (pode levar alguns segundos na primeira execucao)" -ForegroundColor Yellow
+
     try {
         $job = Start-Job -ScriptBlock {
-            param($command)
-            Invoke-Expression $command 2>&1 | Out-String
-        } -ArgumentList $testCommand
-        
+            param($dir)
+            $result = npx -y @modelcontextprotocol/server-filesystem $dir 2>&1 | Out-String
+            return $result
+        } -ArgumentList $scriptDir
+
         $completed = Wait-Job -Job $job -Timeout 30
         Stop-Job -Job $job -ErrorAction SilentlyContinue
-        
+
         if ($completed) {
             $output = Receive-Job -Job $job
             Remove-Job -Job $job
-            
-            if ($output -match "Secure MCP Filesystem Server") {
-                Write-Host "    [OK] Servidor MCP filesystem funcionando!" -ForegroundColor Green
-                return $true
-            }
+            Write-Result "Servidor MCP filesystem testado" "OK"
+        } else {
+            Write-Result "Timeout no teste, mas configuracao foi criada" "AVISO"
         }
-        
-        Write-Host "    [AVISO] Teste inconclusivo, mas configuracao foi criada" -ForegroundColor Yellow
-        return $true
     } catch {
-        Write-Host "    [AVISO] Erro no teste, mas configuracao foi criada: $($_.Exception.Message)" -ForegroundColor Yellow
-        return $true
+        Write-Result "Teste ignorado, configuracao foi criada" "AVISO"
     }
 }
 
 function Add-ToPathWindows {
-    Write-Host "`n[+] Configuracao do PATH do Windows" -ForegroundColor Yellow
-    Write-Host "    Nota: Esta configuracao pode requerer direitos de administrador" -ForegroundColor Yellow
-    Write-Host "    Se falhar, voce pode adicionar manualmente:" -ForegroundColor Yellow
-    Write-Host "    - $env:APPDATA\Python\Python38\Scripts" -ForegroundColor Cyan
-    Write-Host "    - C:\Program Files\nodejs" -ForegroundColor Cyan
-    
+    Write-Host "`n  [+] Verificando PATH do Windows..." -ForegroundColor Yellow
+
+    $items = @(
+        @{ Path = "$env:APPDATA\Python\Python38\Scripts"; Label = "Python Scripts" },
+        @{ Path = "C:\Program Files\nodejs"; Label = "Node.js" }
+    )
+
     try {
-        $pythonScripts = "$env:APPDATA\Python\Python38\Scripts"
-        $nodejs = "C:\Program Files\nodejs"
-        
         $regPath = "HKCU:\Environment"
         $currentPath = (Get-ItemProperty -Path $regPath -Name Path -ErrorAction SilentlyContinue).Path
-        
-        if ($currentPath) {
-            $pathsToAdd = @()
-            if ($currentPath -notlike "*$pythonScripts*") {
-                $pathsToAdd += $pythonScripts
+
+        $missing = @()
+        foreach ($item in $items) {
+            if ($currentPath -and $currentPath -notlike "*$($item.Path)*") {
+                $missing += $item
             }
-            if ($currentPath -notlike "*$nodejs*") {
-                $pathsToAdd += $nodejs
-            }
-            
-            if ($pathsToAdd.Count -gt 0) {
-                Write-Host "    [AVISO] Os seguintes diretorios precisam ser adicionados ao PATH:" -ForegroundColor Yellow
-                foreach ($p in $pathsToAdd) {
-                    Write-Host "       - $p" -ForegroundColor Cyan
-                }
-                Write-Host "    [AVISO] Adicione manualmente nas Variaveis de Ambiente do Windows" -ForegroundColor Yellow
-            } else {
-                Write-Host "    [OK] Diretorios ja estao no PATH" -ForegroundColor Green
+        }
+
+        if ($missing.Count -gt 0) {
+            Write-Result "Diretorios abaixo precisam ser adicionados ao PATH manualmente:" "AVISO"
+            foreach ($item in $missing) {
+                Write-Host "       - $($item.Path) ($($item.Label))" -ForegroundColor Cyan
             }
         } else {
-            Write-Host "    [AVISO] Nao foi possivel verificar o PATH automaticamente" -ForegroundColor Yellow
-            Write-Host "    [AVISO] Verifique manualmente se necessario" -ForegroundColor Yellow
+            Write-Result "PATH ja configurado corretamente" "OK"
         }
     } catch {
-        Write-Host "    [AVISO] Nao foi possivel verificar o PATH automaticamente: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host "    [AVISO] Verifique manualmente se necessario" -ForegroundColor Yellow
+        Write-Result "Nao foi possivel verificar o PATH: $($_.Exception.Message)" "AVISO"
     }
 }
 
 function Invoke-Verification {
-    Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "VERIFICACAO FINAL" -ForegroundColor Cyan
-    Write-Host "$('='*60)" -ForegroundColor Cyan
-    
+    param([string]$pythonPath)
+
+    Write-Banner "VERIFICACAO FINAL" "Cyan"
+
     $checks = @(
-        @("Python", "& `"$pythonPath`" --version"),
-        @("Node.js", "node -v"),
-        @("npm", "npm -v"),
-        @("npx", "npx -v"),
-        @("Ollama", "ollama -v"),
-        @("Ollama modelo", "ollama list"),
-        @("Python openai", "& `"$pythonPath`" -c `"import openai; print(openai.__version__)`""),
-        @("Python dotenv", "& `"$pythonPath`" -c `"import dotenv; print(dotenv.__version__)`"")
+        @{ Name = "Python"; Command = { & $pythonPath --version } }
+        @{ Name = "Node.js"; Command = { node -v } }
+        @{ Name = "npm"; Command = { npm -v } }
+        @{ Name = "npx"; Command = { npx -v } }
+        @{ Name = "OpenCode"; Command = { opencode --version } }
+        @{ Name = "Ollama"; Command = { ollama -v } }
+        @{ Name = "Python openai"; Command = { & $pythonPath -c "import openai; print('ok')" } }
+        @{ Name = "Python dotenv"; Command = { & $pythonPath -c "import dotenv; print('ok')" } }
     )
-    
+
     $results = @()
     foreach ($check in $checks) {
-        $name = $check[0]
-        $command = $check[1]
-        $success = Invoke-CommandSafe $command "Verificando $name"
-        $results += ,@($name, $success)
+        $r = Invoke-Safe $check.Command "Verificando $($check.Name)"
+        $results += @{ Name = $check.Name; Success = $r.Success }
     }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "RESUMO DA VERIFICACAO" -ForegroundColor Cyan
-    Write-Host "$('='*60)" -ForegroundColor Cyan
-    
+
+    Write-Banner "RESUMO DA VERIFICACAO" "Cyan"
+
+    $totalOK = 0
     foreach ($result in $results) {
-        $name = $result[0]
-        $success = $result[1]
-        $status = if ($success) { "[OK]" } else { "[ERRO]" }
-        $color = if ($success) { "Green" } else { "Red" }
-        Write-Host "$($name.PadRight(20)) $status" -ForegroundColor $color
+        $status = if ($result.Success) { "[OK]" } else { "[ERRO]" }
+        $color = if ($result.Success) { "Green" } else { "Red" }
+        Write-Host "  $($result.Name.PadRight(20)) $status" -ForegroundColor $color
+        if ($result.Success) { $totalOK++ }
     }
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "ARQUIVOS CRIADOS" -ForegroundColor Cyan
-    Write-Host "$('='*60)" -ForegroundColor Cyan
-    Write-Host "Configuracao MCP: $mcpConfigFile" -ForegroundColor White
-    Write-Host "Arquivo .env: $envFile" -ForegroundColor White
-    Write-Host "Diretorio projeto:  $scriptDir" -ForegroundColor White
-    
-    Write-Host "`n$('='*60)" -ForegroundColor Cyan
-    Write-Host "PROXIMOS PASSOS" -ForegroundColor Cyan
-    Write-Host "$('='*60)" -ForegroundColor Cyan
-    Write-Host "1. Reinicie o Windsurf para carregar a configuracao MCP" -ForegroundColor White
-    Write-Host "2. As ferramentas MCP estarao disponiveis no Cascade" -ForegroundColor White
-    Write-Host "3. Para testar o cliente Python: $pythonPath mcp-client.py" -ForegroundColor White
-    Write-Host "4. Para uso automatizado: $pythonPath mcp-client.py 'sua pergunta'" -ForegroundColor White
+
+    Write-Host "`n  Total: $totalOK/$($results.Count) verificacoes OK" -ForegroundColor $(
+        if ($totalOK -eq $results.Count) { "Green" } else { "Yellow" }
+    )
 }
 
-Write-Host "`n$('='*60)" -ForegroundColor Cyan
-Write-Host "SCRIPT DE CONFIGURACAO 100% AUTOMATICA" -ForegroundColor Cyan
-Write-Host "MCP + OpenRouter + Devin + Ollama + Java + Android SDK + Notepad++ + RustDesk" -ForegroundColor Cyan
-Write-Host "$('='*60)" -ForegroundColor Cyan
+# ============================= EXECUCAO PRINCIPAL =============================
 
-$totalSteps = 17
+# Verificar privilegios
+if (-not $SkipAdminCheck -and -not (Test-Administrator)) {
+    Write-Host "`n[!] Este script requer permissao de administrador." -ForegroundColor Yellow
+    Write-Host "[!] Solicitando elevacao..." -ForegroundColor Yellow
+
+    try {
+        $scriptPath = $MyInvocation.MyCommand.Path
+        if ($scriptPath) {
+            $psiArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+            Start-Process powershell -Verb RunAs -ArgumentList $psiArgs
+            exit
+        } else {
+            Write-Host "[ERRO] Execute como administrador manualmente." -ForegroundColor Red
+            exit 1
+        }
+    } catch {
+        Write-Host "[ERRO] Nao foi possivel elevar: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+}
+
+if ($SkipAdminCheck) {
+    Write-Result "Modo de teste (sem verificacao de administrador)" "AVISO"
+} else {
+    Write-Result "Executando como administrador" "OK"
+}
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$userProfile = $env:USERPROFILE
+$devinConfigDir = Join-Path $userProfile ".codeium\windsurf"
+$mcpConfigFile = Join-Path $devinConfigDir "mcp_config.json"
+$envFile = Join-Path $scriptDir ".env"
+
+# ============================= BANNER INICIAL =============================
+
+Write-Host ""
+Write-Host ("#" * 60) -ForegroundColor Cyan
+Write-Host "  SCRIPT DE CONFIGURACAO AUTOMATICA" -ForegroundColor White
+Write-Host "  MCP + OpenRouter + Windsurf + Ollama + Java + Android" -ForegroundColor White
+Write-Host ("#" * 60) -ForegroundColor Cyan
+Write-Host "  Diretorio: $scriptDir" -ForegroundColor Gray
+Write-Host ""
+
+$totalSteps = 20
 $currentStep = 0
 
+# PASSO 1: Python
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Python $pythonVersion"
 $pythonPath = Test-PythonInstalled
 if (-not $pythonPath) {
-    Write-Host "    Python $pythonVersion nao encontrado" -ForegroundColor Yellow
+    Write-Result "Python $pythonVersion nao encontrado" "AVISO"
     Install-Python
 }
 
+# PASSO 2: setup.py
 $currentStep++
 Write-Step $currentStep $totalSteps "Executando setup.py"
 $setupPyPath = Join-Path $scriptDir "setup.py"
 if (Test-Path $setupPyPath) {
-    Write-Host "    Executando setup.py..." -ForegroundColor Yellow
-    $result = Invoke-CommandSafe "& `"$pythonPath`" `"$setupPyPath`"" "Executando setup.py"
-    if ($result) {
-        Write-Host "    [OK] setup.py executado com sucesso!" -ForegroundColor Green
-    } else {
-        Write-Host "    [AVISO] Erro ao executar setup.py, mas continuando..." -ForegroundColor Yellow
-    }
+    $null = Invoke-Safe { & $pythonPath $setupPyPath } "Executar setup.py"
 } else {
-    Write-Host "    [AVISO] setup.py nao encontrado, pulando..." -ForegroundColor Yellow
+    Write-Result "setup.py nao encontrado, pulando" "AVISO"
 }
 
+# PASSO 3: Node.js
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Node.js"
 if (-not (Test-NodeInstalled)) {
-    Write-Host "    Node.js nao encontrado" -ForegroundColor Yellow
+    Write-Result "Node.js nao encontrado" "AVISO"
     Install-NodeJs
 }
 
+# PASSO 4: npx
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando npx"
 if (-not (Test-NpxInstalled)) {
-    Write-Host "    npx nao encontrado, mas geralmente vem com Node.js" -ForegroundColor Yellow
-    Write-Host "    Continuando mesmo assim..." -ForegroundColor Yellow
+    Write-Result "npx nao encontrado (geralmente vem com Node.js)" "AVISO"
 }
 
+# PASSO 5: Java
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Java"
 $javaPath = Test-JavaInstalled
 if (-not $javaPath) {
-    Write-Host "    Java nao encontrado" -ForegroundColor Yellow
+    Write-Result "Java nao encontrado" "AVISO"
     Install-Java
 }
 
+# PASSO 6: ADB
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando ADB"
 $adbPath = Test-AdbInstalled
 if (-not $adbPath) {
-    Write-Host "    ADB nao encontrado" -ForegroundColor Yellow
+    Write-Result "ADB nao encontrado" "AVISO"
     Install-AndroidSdk
 }
 
+# PASSO 7: Notepad++
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Notepad++"
 if (-not (Test-NotepadPlusPlusInstalled)) {
-    Write-Host "    Notepad++ nao encontrado" -ForegroundColor Yellow
     Install-NotepadPlusPlus
+} else {
+    Write-Result "Notepad++ ja instalado" "OK"
 }
 
+# PASSO 8: RustDesk
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando RustDesk"
 if (-not (Test-RustDeskInstalled)) {
-    Write-Host "    RustDesk nao encontrado" -ForegroundColor Yellow
     Install-RustDesk
+} else {
+    Write-Result "RustDesk ja instalado" "OK"
 }
 
+# PASSO 9: Ollama
 $currentStep++
 Write-Step $currentStep $totalSteps "Verificando Ollama"
 if (-not (Test-OllamaInstalled)) {
-    Write-Host "    Ollama nao encontrado" -ForegroundColor Yellow
+    Write-Result "Ollama nao encontrado" "AVISO"
     Install-Ollama
 }
 
+# PASSO 10: Modelo Ollama
 $currentStep++
-Write-Step $currentStep $totalSteps "Configurando modelo Ollama antigravity-sonnet"
-Install-OllamaModel
+Write-Step $currentStep $totalSteps "Configurando modelo Ollama"
+$null = Install-OllamaModel -ModelName "llama3"
 
+# PASSO 11: Base de conhecimento
 $currentStep++
-Write-Step $currentStep $totalSteps "Configurando base de conhecimento do Ollama"
-Set-OllamaKnowledgeBase
+Write-Step $currentStep $totalSteps "Configurando base de conhecimento Ollama"
+$null = Set-OllamaKnowledgeBase
 
+# PASSO 12: OpenCode
 $currentStep++
-Write-Step $currentStep $totalSteps "Solicitando token OpenRouter"
+Write-Step $currentStep $totalSteps "Verificando OpenCode"
+if (-not (Test-OpencodeInstalled)) {
+    Write-Result "OpenCode nao encontrado" "AVISO"
+    Install-Opencode
+}
+
+# PASSO 13: Token OpenRouter
+$currentStep++
+Write-Step $currentStep $totalSteps "Configurando token OpenRouter"
 Request-OpenRouterToken
 
+# PASSO 14: Dependencias Python
 $currentStep++
 Write-Step $currentStep $totalSteps "Instalando dependencias Python"
-Install-PythonDependencies
+$null = Install-PythonDependencies -pythonPath $pythonPath
 
+# PASSO 15: PATH do Windows
 $currentStep++
-Write-Step $currentStep $totalSteps "Configurando PATH do Windows"
+Write-Step $currentStep $totalSteps "Verificando PATH do Windows"
 Add-ToPathWindows
 
+# PASSO 16: Diretorio config Windsurf
 $currentStep++
-Write-Step $currentStep $totalSteps "Criando diretorio de configuracao Devin"
-New-DevinConfigDir
+Write-Step $currentStep $totalSteps "Criando diretorio de configuracao Windsurf"
+$null = New-McpConfig -ConfigDir $devinConfigDir -Label "Windsurf"
 
+# PASSO 17: Config MCP Devin
 $currentStep++
-Write-Step $currentStep $totalSteps "Criando configuracao MCP"
-New-McpConfig
+Write-Step $currentStep $totalSteps "Criando configuracao MCP Devin"
+$devinAppDataDir = Join-Path $env:APPDATA "Devin"
+$null = New-McpConfig -ConfigDir $devinAppDataDir -Label "Devin"
 
+# PASSO 18: Testar servidor MCP
 $currentStep++
-Write-Step $currentStep $totalSteps "Criando configuracao MCP Devin com OpenRouter"
-New-DevinMcpConfig
-
-$currentStep++
-Write-Step $currentStep $totalSteps "Testando e verificando configuracao"
+Write-Step $currentStep $totalSteps "Testando servidor MCP"
 Test-NpxFilesystem
-Invoke-Verification
 
-Write-Host "`n$('='*60)" -ForegroundColor Green
-Write-Host "CONFIGURACAO 100% AUTOMATICA CONCLUIDA!" -ForegroundColor Green
-Write-Host "$('='*60)" -ForegroundColor Green
-Write-Host "`nAgora voce pode:" -ForegroundColor White
-Write-Host "1. Reiniciar o Windsurf para usar MCP" -ForegroundColor White
-Write-Host "2. Executar: $pythonPath mcp-client.py" -ForegroundColor White
-Write-Host "3. Ou modo automatico: $pythonPath mcp-client.py 'sua pergunta'" -ForegroundColor White
+# PASSO 19: Instalar dependencias Python (via pip)
+$currentStep++
+Write-Step $currentStep $totalSteps "Garantindo dependencias Python"
+$null = Invoke-Safe { & $pythonPath -m pip install --user python-dotenv } "Instalar python-dotenv"
 
-Write-Host "`nPressione qualquer tecla para sair..." -ForegroundColor Yellow
-$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+# PASSO 20: Verificacao final
+$currentStep++
+Write-Step $currentStep $totalSteps "Verificacao final"
+Invoke-Verification -pythonPath $pythonPath
+
+# ============================= FINAL =============================
+
+Write-Host ""
+Write-Host ("#" * 60) -ForegroundColor Green
+Write-Host "  CONFIGURACAO CONCLUIDA COM SUCESSO!" -ForegroundColor White
+Write-Host ("#" * 60) -ForegroundColor Green
+Write-Host "`n  Proximos passos:" -ForegroundColor White
+Write-Host "  1. Reinicie o Windsurf para carregar a configuracao MCP" -ForegroundColor Gray
+Write-Host "  2. As ferramentas MCP estarao disponiveis" -ForegroundColor Gray
+Write-Host "  3. Para testar: $pythonPath mcp-client.py" -ForegroundColor Gray
+Write-Host "  4. Para usar OpenCode: opencode --model ollama/antigravity-sonnet" -ForegroundColor Gray
+Write-Host ""

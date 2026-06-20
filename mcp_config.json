@@ -5,18 +5,8 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "c:\\Users\\Qb\\Desktop\\mcp"
+        "C:\\Users\\Qb\\Desktop"
       ]
-    },
-    "brave-search": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-brave-search"
-      ],
-      "env": {
-        "BRAVE_API_KEY": "${env:BRAVE_API_KEY}"
-      }
     }
   }
 }
