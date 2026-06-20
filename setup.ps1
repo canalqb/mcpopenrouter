@@ -138,13 +138,7 @@ function Install-Python {
 }
 
 function Test-NodeInstalled {
-    # Tenta via PATH primeiro
-    $result = Invoke-CommandSafe "node -v" "Verificando Node.js via PATH"
-    if ($result) {
-        return $true
-    }
-    
-    # Tenta encontrar em locais comuns
+    # Tenta encontrar em locais comuns primeiro (evita erro de PATH)
     $nodePaths = @(
         "C:\Program Files\nodejs\node.exe",
         "C:\nodejs\node.exe",
@@ -155,9 +149,16 @@ function Test-NodeInstalled {
         if (Test-Path $path) {
             Write-Host "    Node.js encontrado em: $path" -ForegroundColor Green
             Write-Host "    Adicionando ao PATH temporariamente..." -ForegroundColor Yellow
-            $env:PATH += ";C:\Program Files\nodejs"
+            $nodeDir = Split-Path $path -Parent
+            $env:PATH = "$nodeDir;$env:PATH"
             return $true
         }
+    }
+    
+    # Se não encontrou, tenta via PATH
+    $result = Invoke-CommandSafe "node -v" "Verificando Node.js via PATH"
+    if ($result) {
+        return $true
     }
     
     return $false
