@@ -199,7 +199,42 @@ function Install-Java {
     $wingetAvailable = Get-Command winget -ErrorAction SilentlyContinue
     if ($wingetAvailable) {
         Write-Host "    Usando winget para instalar Java..." -ForegroundColor Yellow
-        $result = Invoke-CommandSafe "winget install Oracle.JDK.17 --silent --accept-package-agreements --accept-source-agreements" "Instalando Java via winget"
+        
+        # Tentar Eclipse Adoptium (Temurin) primeiro - mais confiavel
+        $result = Invoke-CommandSafe "winget install EclipseAdoptium.Temurin.17.JDK --silent --accept-package-agreements --accept-source-agreements" "Instalando Java (Eclipse Adoptium) via winget"
+        if ($result) {
+            Write-Host "    Java instalado com sucesso via winget!" -ForegroundColor Green
+            Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
+            
+            # Adicionar Java ao PATH da sessao atual
+            $javaPaths = @(
+                "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin",
+                "C:\Program Files\Java\jdk-17\bin",
+                "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin",
+                "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
+            )
+            
+            foreach ($javaPath in $javaPaths) {
+                $resolvedPath = Resolve-Path $javaPath -ErrorAction SilentlyContinue
+                if ($resolvedPath) {
+                    $env:PATH = "$resolvedPath;$env:PATH"
+                    Write-Host "    [OK] Java adicionado ao PATH: $resolvedPath" -ForegroundColor Green
+                    break
+                }
+                if (Test-Path $javaPath) {
+                    $env:PATH = "$javaPath;$env:PATH"
+                    Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
+                    break
+                }
+            }
+            
+            Write-Host "    Continuando com a execucao do script..." -ForegroundColor Yellow
+            return $true
+        }
+        
+        # Tentar Oracle JDK como alternativa
+        Write-Host "    Tentando Oracle JDK como alternativa..." -ForegroundColor Yellow
+        $result = Invoke-CommandSafe "winget install Oracle.JDK.17 --silent --accept-package-agreements --accept-source-agreements" "Instalando Java (Oracle) via winget"
         if ($result) {
             Write-Host "    Java instalado com sucesso via winget!" -ForegroundColor Green
             Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
@@ -207,7 +242,6 @@ function Install-Java {
             # Adicionar Java ao PATH da sessao atual
             $javaPaths = @(
                 "C:\Program Files\Java\jdk-17\bin",
-                "C:\Program Files\Eclipse Adoptium\jdk-17.0.8.101-hotspot\bin",
                 "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
             )
             
@@ -227,19 +261,25 @@ function Install-Java {
     $chocoAvailable = Get-Command choco -ErrorAction SilentlyContinue
     if ($chocoAvailable) {
         Write-Host "    Usando chocolatey para instalar Java..." -ForegroundColor Yellow
-        $result = Invoke-CommandSafe "choco install jdk17 -y" "Instalando Java via chocolatey"
+        $result = Invoke-CommandSafe "choco install temurin17 -y" "Instalando Java via chocolatey"
         if ($result) {
             Write-Host "    Java instalado com sucesso via chocolatey!" -ForegroundColor Green
             Write-Host "    Atualizando PATH para sessao atual..." -ForegroundColor Yellow
             
             # Adicionar Java ao PATH da sessao atual
             $javaPaths = @(
+                "C:\Program Files\Eclipse Adoptium\jdk-17.*\bin",
                 "C:\Program Files\Java\jdk-17\bin",
-                "C:\Program Files\Eclipse Adoptium\jdk-17.0.8.101-hotspot\bin",
-                "$env:LOCALAPPDATA\Programs\Java\jdk-17\bin"
+                "$env:LOCALAPPDATA\Programs\Eclipse Adoptium\jdk-17.*\bin"
             )
             
             foreach ($javaPath in $javaPaths) {
+                $resolvedPath = Resolve-Path $javaPath -ErrorAction SilentlyContinue
+                if ($resolvedPath) {
+                    $env:PATH = "$resolvedPath;$env:PATH"
+                    Write-Host "    [OK] Java adicionado ao PATH: $resolvedPath" -ForegroundColor Green
+                    break
+                }
                 if (Test-Path $javaPath) {
                     $env:PATH = "$javaPath;$env:PATH"
                     Write-Host "    [OK] Java adicionado ao PATH: $javaPath" -ForegroundColor Green
@@ -256,8 +296,8 @@ function Install-Java {
     Write-Host "INSTALACAO MANUAL DO JAVA NECESSARIA" -ForegroundColor Red
     Write-Host "$('='*60)" -ForegroundColor Red
     Write-Host "`nPor favor, siga estes passos:" -ForegroundColor White
-    Write-Host "1. Acesse: https://www.oracle.com/java/technologies/downloads/" -ForegroundColor Cyan
-    Write-Host "2. Baixe o JDK 17 para Windows" -ForegroundColor Cyan
+    Write-Host "1. Acesse: https://adoptium.net/" -ForegroundColor Cyan
+    Write-Host "2. Baixe o Temurin JDK 17 para Windows" -ForegroundColor Cyan
     Write-Host "3. Execute o instalador" -ForegroundColor Cyan
     Write-Host "4. Apos a instalacao, feche e reabra este terminal" -ForegroundColor Cyan
     Write-Host "5. Execute este script novamente" -ForegroundColor Cyan
