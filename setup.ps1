@@ -1051,7 +1051,7 @@ Write-Host "SCRIPT DE CONFIGURACAO 100% AUTOMATICA" -ForegroundColor Cyan
 Write-Host "MCP + OpenRouter + Devin + Ollama + Java + Android SDK + Notepad++ + RustDesk" -ForegroundColor Cyan
 Write-Host "$('='*60)" -ForegroundColor Cyan
 
-$totalSteps = 16
+$totalSteps = 17
 $currentStep = 0
 
 $currentStep++
@@ -1060,6 +1060,21 @@ $pythonPath = Test-PythonInstalled
 if (-not $pythonPath) {
     Write-Host "    Python $pythonVersion nao encontrado" -ForegroundColor Yellow
     Install-Python
+}
+
+$currentStep++
+Write-Step $currentStep $totalSteps "Executando setup.py"
+$setupPyPath = Join-Path $scriptDir "setup.py"
+if (Test-Path $setupPyPath) {
+    Write-Host "    Executando setup.py..." -ForegroundColor Yellow
+    $result = Invoke-CommandSafe "& `"$pythonPath`" `"$setupPyPath`"" "Executando setup.py"
+    if ($result) {
+        Write-Host "    [OK] setup.py executado com sucesso!" -ForegroundColor Green
+    } else {
+        Write-Host "    [AVISO] Erro ao executar setup.py, mas continuando..." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "    [AVISO] setup.py nao encontrado, pulando..." -ForegroundColor Yellow
 }
 
 $currentStep++
