@@ -1,150 +1,236 @@
-# MCP + OpenRouter + Devin - Setup Automatizado
+# MCP + OpenRouter + Devin + Android — Setup Automatizado
 
-Script de configuração 100% automático para MCP com OpenRouter e Devin, compatível com Windows 10/11.
+Script PowerShell 100% automatizado para configurar ambiente de desenvolvimento completo no Windows 10/11: MCP (Model Context Protocol), OpenRouter, Ollama, Android SDK, Java, Python e ferramentas auxiliares.
 
-## 📋 Visão Geral
+---
 
-Este script instala e configura automaticamente todas as ferramentas necessárias para desenvolvimento com MCP (Model Context Protocol), OpenRouter, Devin IDE, e ferramentas complementares para desenvolvimento Android e acesso remoto.
+## Requisitos
 
-## 🚀 Instalação Automática (Recomendado)
+- Windows 10/11 64-bit
+- Conexão com internet
+- ~20 GB de espaço livre em disco
 
-Execute o script de instalação via PowerShell:
+---
+
+## Instalação
+
+### Baixar e executar
 
 ```powershell
-# Opção 1: Baixar e executar
 cd $HOME\Desktop
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1" -OutFile "setup.ps1"
 powershell -ExecutionPolicy Bypass -File setup.ps1
-
-# Opção 2: Execução direta
-cd $HOME/Desktop
-Invoke-Expression (Invoke-RestMethod -Uri "https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1")
 ```
 
-## 📦 Componentes Instalados
+### Execução direta (sem download)
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/canalqb/mcpopenrouter/main/setup.ps1')"
+```
+
+### Modo de teste (sem admin)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1 -SkipAdminCheck
+```
+
+---
+
+## Os 21 Passos do Script
+
+### Passo 1 — Python 3.8.10
+Verifica se o Python 3.8 está instalado. Se não estiver, tenta instalar via winget, chocolatey ou download direto do instalador oficial (`python-3.8.10-amd64.exe`).
+
+### Passo 2 — setup.py
+Executa o script `setup.py` do repositório (se existir) para configurações iniciais do projeto.
+
+### Passo 3 — Node.js
+Verifica/instala o Node.js via winget, chocolatey ou download manual. Necessário para executar servidores MCP via `npx`.
+
+### Passo 4 — npx
+Verifica se o npx está disponível (geralmente incluso no Node.js).
+
+### Passo 5 — Java JDK 17
+Verifica/instala o Eclipse Temurin JDK 17. Essencial para o Android SDK e ferramentas de build (aapt2, d8, apksigner).
+
+### Passo 6 — ADB (Android Debug Bridge)
+Verifica se o `adb.exe` está no PATH ou em `%LOCALAPPDATA%\Android\Sdk\platform-tools\`. Se não estiver, baixa o `platform-tools-latest-windows.zip` do Google e extrai no diretório padrão do SDK.
+
+### Passo 7 — Android Command Line Tools
+Baixa o `commandlinetools-win-11076708_latest.zip` do Google e instala em `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\`. Em seguida, usa o `sdkmanager.bat` para:
+- Aceitar as licenças do Android SDK
+- Instalar `platform-tools` (adb)
+- Instalar `build-tools;34.0.0`
+- Instalar `platforms;android-34`
+
+Adiciona `cmdline-tools\latest\bin` e `platform-tools` ao PATH permanentemente via registro do usuário.
+
+### Passo 8 — Notepad++
+Verifica/instala o Notepad++ via winget ou chocolatey. Opcional — continua mesmo se falhar.
+
+### Passo 9 — RustDesk
+Verifica se o RustDesk (acesso remoto) está instalado. Opcional — apenas avisa e continua.
+
+### Passo 10 — Ollama
+Verifica/instala o Ollama (runtime local para LLMs) via winget, chocolatey ou download do instalador oficial (`OllamaSetup.exe`). Adiciona ao PATH da sessão atual.
+
+### Passo 11 — Modelo Ollama
+Baixa o modelo `llama3` (~4.7 GB) via `ollama pull llama3`.
+
+### Passo 12 — Base de Conhecimento
+Cria o diretório `knowledge_base\` e baixa o documento de regras do Google Docs. Gera o script `update_knowledge.ps1` para atualizações futuras.
+
+### Passo 13 — OpenCode
+Verifica/instala o OpenCode (`opencode-ai`) globalmente via npm.
+
+### Passo 14 — Token OpenRouter
+Tenta ler o token `OPENROUTER_TOKEN` do GitHub Secrets via `gh secret view`. Se não conseguir, solicita manualmente ao usuário. Salva em `.env` como `OPENAI_API_KEY`.
+
+### Passo 15 — Dependências Python
+Instala os pacotes listados em `requirements.txt` via `pip install -r requirements.txt`.
+
+### Passo 16 — PATH do Windows
+Verifica se diretórios importantes (`Python Scripts`, `Node.js`) estão no PATH do usuário. Apenas avisa se estiverem faltando — não modifica automaticamente.
+
+### Passo 17 — Config MCP Windsurf
+Cria `~\.codeium\windsurf\mcp_config.json` com servidor `filesystem` apontando para o diretório do projeto.
+
+### Passo 18 — Config MCP Devin
+Cria `%APPDATA%\Devin\mcp_config.json` com a mesma configuração do servidor filesystem.
+
+### Passo 19 — Testar Servidor MCP
+Testa o servidor MCP filesystem executando `npx -y @modelcontextprotocol/server-filesystem` em segundo plano (timeout de 30s).
+
+### Passo 20 — Garantir python-dotenv
+Instala o pacote `python-dotenv` via pip como garantia adicional.
+
+### Passo 21 — Verificação Final
+Testa cada componente instalado e exibe um resumo com o status (OK/ERRO) de cada um.
+
+---
+
+## Componentes Instalados
 
 ### Linguagens e Runtimes
-- **Python 3.8.10**: Ambiente Python para execução de scripts MCP
-- **Node.js e npx**: Runtime JavaScript para execução de servidores MCP via npx
-- **Java JDK 17**: Ambiente Java para desenvolvimento Android
+| Componente | Versão | Instalação |
+|---|---|---|
+| Python | 3.8.10 | `winget`, `choco` ou download direto |
+| Node.js | LTS | `winget` ou `choco` |
+| Java JDK | 17 (Temurin) | `winget` ou `choco` |
 
-### Ferramentas de Desenvolvimento Android
-- **Android SDK (via Android Studio)**: SDK completo para desenvolvimento Android
-- **ADB (Android Debug Bridge)**: Ferramenta de depuração e comunicação com dispositivos Android
+### Android SDK
+| Componente | Local |
+|---|---|
+| Command Line Tools | `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\` |
+| Platform Tools (ADB) | `%LOCALAPPDATA%\Android\Sdk\platform-tools\` |
+| Build Tools 34.0.0 | `%LOCALAPPDATA%\Android\Sdk\build-tools\34.0.0\` |
+| Android Platform 34 | `%LOCALAPPDATA%\Android\Sdk\platforms\android-34\` |
 
-### Editores e Ferramentas de Acesso
-- **Notepad++**: Editor de texto avançado para Windows
-- **RustDesk**: Ferramenta de acesso remoto (senha padrão: 2772)
+### IA / LLM
+| Componente | Descrição |
+|---|---|
+| Ollama | Runtime local para LLMs |
+| Modelo llama3 | Modelo padrão (~4.7 GB) |
+| OpenRouter | Proxy de API para múltiplos modelos |
 
-### Inteligência Artificial e MCP
-- **Ollama**: Runtime para execução de modelos LLM localmente
-  - Modelo: antigravity-sonnet
-  - PATH configurado automaticamente
-  - Base de conhecimento com atualização diária
-- **OpenRouter**: Integração com modelos via API
-  - Configuração MCP para Devin/Cascade
-  - Modelo: ollama/antigravity-sonnet
+### MCP
+| Servidor | Comando | Propósito |
+|---|---|---|
+| `@modelcontextprotocol/server-filesystem` | `npx -y` | Operações com arquivos (leitura, escrita, busca) |
 
-### Configurações MCP
-- **Configuração MCP para Devin**: Arquivo `~/.codeium/windsurf/mcp_config.json`
-- **Configuração MCP para Devin/Cascade**: Arquivo `%APPDATA%\Devin\mcp_config.json`
-  - Servidor OpenRouter configurado
-  - Modelo ollama/antigravity-sonnet
+### Ferramentas
+| Ferramenta | Uso |
+|---|---|
+| Notepad++ | Editor de texto |
+| RustDesk | Acesso remoto |
+| OpenCode | CLI interativo com IA |
 
-### Base de Conhecimento Ollama
-- **Diretório**: `knowledge_base/layout_rules.txt`
-- **Fonte**: Documento Google Docs com regras de layout, postagem e páginas
-- **Atualização**: Script `update_knowledge.ps1` executado diariamente às 9:00 AM
-- **URL**: https://docs.google.com/document/d/1sTsRoAEWrU-1ltOMmUWyQ-18DFTmYl0R5UZc-QnNtCs
+---
 
-### Dependências Python
-- Pacotes necessários para funcionamento do cliente MCP
-- Instalados via `requirements.txt`
+## Estrutura de Arquivos
 
-## 🔐 Configuração do Secret
+```
+%USERPROFILE%\Desktop\mcp\
+├── setup.ps1                  # Script principal (21 passos)
+├── setup.py                   # Configuração inicial Python
+├── mcp-client.py              # Cliente MCP OpenRouter
+├── requirements.txt           # Dependências Python
+├── .env                       # Token OpenRouter
+├── knowledge_base\
+│   └── layout_rules.txt       # Regras de layout (base de conhecimento)
+├── update_knowledge.ps1       # Script de atualização diária
+├── README.md                  # Este arquivo
+└── .opencode\
+    └── AGENTS.md              # Instruções do assistente
 
-O script lê o token do OpenRouter do secret `OPENROUTER_TOKEN` do GitHub. Configure em:
-https://github.com/canalqb/mcpopenrouter/settings/secrets/actions
+%LOCALAPPDATA%\Android\Sdk\
+├── cmdline-tools\latest\bin\  # sdkmanager.bat
+├── platform-tools\            # adb.exe
+├── build-tools\34.0.0\        # aapt2, d8, apksigner
+└── platforms\android-34\      # android.jar
 
-Alternativamente, o script solicitará o token manualmente durante a execução se não encontrar o secret.
+~\.codeium\windsurf\mcp_config.json     # Config MCP Windsurf
+%APPDATA%\Devin\mcp_config.json         # Config MCP Devin
+```
 
-## 📝 Uso
+---
+
+## Uso
 
 ### Cliente MCP Python
-Após a instalação, execute o cliente:
-```bash
+```powershell
 python mcp-client.py
+python mcp-client.py "sua pergunta aqui"
 ```
 
-Ou modo automatizado:
-```bash
-python mcp-client.py "sua pergunta"
+### OpenCode
+```powershell
+opencode --model ollama/antigravity-sonnet
 ```
 
-### Configuração Devin IDE
-1. Reinicie o Devin IDE para carregar a configuração MCP
-2. As ferramentas MCP estarão disponíveis no Cascade
-3. Configure o modelo desejado nas configurações do Cascade
-
-### Acesso Remoto (RustDesk)
-- Senha padrão: 2772
-- Configure dispositivos nas configurações do RustDesk
-- Acesso disponível após instalação
-
-## 🔧 Ferramentas MCP Disponíveis
-
-- **read_file**: Ler conteúdo de arquivos
-- **write_file**: Escrever conteúdo em arquivos  
-- **list_directory**: Listar arquivos e diretórios
-- **search_files**: Buscar arquivos por padrão
-- **filesystem**: Operações seguras com sistema de arquivos
-
-## 💻 Compatibilidade
-
-- **Sistema**: Windows 10/11
-- **Python**: 3.8.10+
-- **IDE**: Devin (antigo Windsurf)
-- **Arquitetura**: x64
-
-## 📁 Estrutura de Arquivos
-
-Após a instalação, os seguintes arquivos serão criados:
-```
-~/.codeium/windsurf/mcp_config.json          # Configuração MCP Devin
-%APPDATA%\Devin\mcp_config.json              # Configuração MCP Cascade
-knowledge_base/layout_rules.txt             # Base de conhecimento Ollama
-update_knowledge.ps1                        # Script de atualização diária
-.env                                         # Variáveis de ambiente
-requirements.txt                             # Dependências Python
+### ADB
+```powershell
+adb devices
+adb install app.apk
+adb logcat
 ```
 
-## 🔄 Atualização Diária da Base de Conhecimento
+### Android SDK (build de APK)
+```powershell
+# Compilar com aapt2 + d8 + apksigner
+$ANDROID_HOME\build-tools\34.0.0\aapt2.exe compile -o output *.java
+```
 
-O script cria uma tarefa agendada do Windows que:
-- Executa diariamente às 9:00 AM
-- Baixa a versão mais recente do documento de regras
-- Atualiza o arquivo `knowledge_base/layout_rules.txt`
-- Nome da tarefa: `OllamaKnowledgeUpdate`
+---
 
-## 🐛 Solução de Problemas
+## Solução de Problemas
 
-### Ollama não funciona após instalação
-- Feche e reabra o terminal para atualizar o PATH
-- Execute `ollama -v` para verificar a instalação
+### Script não executa como administrador
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1 -SkipAdminCheck
+```
+Alguns passos (instalação de programas) podem falhar sem admin.
 
-### ADB não reconhece dispositivos
-- Verifique se o modo de desenvolvedor está ativado no dispositivo
-- Execute `adb devices` para listar dispositivos conectados
+### Python 3.8 não é encontrado
+Instale manualmente de https://www.python.org/downloads/release/python-3810/ e marque "Add Python to PATH".
 
-### RustDesk não conecta
-- Verifique se a senha 2772 foi configurada corretamente
-- Configure as regras de firewall se necessário
+### ADB não reconhece dispositivo
+1. Ative o modo desenvolvedor no Android
+2. Ative a depuração USB
+3. Execute `adb devices`
 
-### MCP não aparece no Devin
-- Reinicie o Devin IDE
-- Verifique se o arquivo `mcp_config.json` foi criado corretamente
-- Consulte os logs do Devin para erros
+### Ollama não encontra o modelo
+```powershell
+ollama pull llama3
+```
 
-## 📄 Licença
+### MCP não aparece na IDE
+1. Verifique se `mcp_config.json` existe nos diretórios corretos
+2. Reinicie a IDE
+3. Verifique se o Node.js está no PATH
+
+---
+
+## Licença
 
 Este projeto é fornecido como está para fins educacionais e de desenvolvimento.
